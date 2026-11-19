@@ -1,0 +1,776 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'catalog.dart';
+import 'models.dart';
+
+final Store store = Store();
+
+/// Aba ativa da navegação inferior (0 Guarda-Roupas, 1 Início, 2 Rastreio, 3 Menu).
+final ValueNotifier<int> tabIndex = ValueNotifier<int>(1);
+
+class Selection {
+  List<String?> cima = [null];
+  List<String?> baixo = [null];
+  String? calcado;
+  List<String> acess = [];
+  Map<String, int> layer = {'cima': 0, 'baixo': 0};
+  String? fromLook;
+
+  /// Itens no formato "secao|nome" das peças do look que estão no cesto.
+  List<String> missing = [];
+
+  List<String> ids() {
+    final all = <String>[
+      ...cima.whereType<String>(),
+      ...baixo.whereType<String>(),
+      if (calcado != null) calcado!,
+      ...acess,
+    ];
+    final out = <String>[];
+    for (final id in all) {
+      if (!out.contains(id)) out.add(id);
+    }
+    return out;
+  }
+}
+
+class Store extends ChangeNotifier {
+  bool loaded = false;
+  List<Piece> items = [];
+  List<Look> looks = [];
+  List<UseLog> log = [];
+  List<LookLog> lookLog = [];
+  List<Wash> washes = [];
+  List<Removal> removals = [];
+  List<PieceType> customTypes = [];
+  List<ColorTag> customColors = [];
+  List<String> extraTags = [];
+  Map<String, String> rules = {};
+  String profileName = 'Alex';
+  int cols = 2;
+
+  Selection sel = Selection();
+  final Map<String, int> focus = {};
+  List<MapEntry<String, String>>? undo;
+  File? _file;
+
+  // ---------------------------------------------------------------- consultas
+  List<Piece> get live => items.where((p) => !p.deleted).toList();
+  List<PieceType> get allTypes => [...kTypes, ...customTypes];
+  List<ColorTag> get allColors => [...kColors, ...customColors];
+
+  PieceType typeById(String id) {
+    for (final t in allTypes) {
+      if (t.id == id) return t;
+    }
+    return kTypes.last;
+  }
+
+  PieceType typeOf(Piece p) => typeById(p.typeId);
+  String catOf(Piece p) => typeOf(p).cat;
+  String shapeOf(Piece p) => p.shape ?? typeOf(p).shape;
+  String typeRule(String typeId) => rules[typeId] ?? typeById(typeId).rule;
+  String ruleOf(Piece p) => p.rule ?? typeRule(p.typeId);
+
+  Piece? byId(String? id) {
+    if (id == null) return null;
+    for (final p in items) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  Look? lookById(String? id) {
+    if (id == null) return null;
+    for (final l in looks) {
+      if (l.id == id) return l;
+    }
+    return null;
+  }
+
+  List<String> get allTags {
+    final s = <String>{};
+    for (final p in live) {
+      s.addAll(p.tags);
+    }
+    final l = s.toList();
+    l.sort();
+    return l;
+  }
+
+  List<Piece> get pilha {
+    final l = live.where((p) => p.status == 'emUso').toList();
+    l.sort((a, b) {
+      final c = (b.lastUse ?? 0).compareTo(a.lastUse ?? 0);
+      return c != 0 ? c : a.name.compareTo(b.name);
+    });
+    return l;
+  }
+
+  List<Piece> get cesto => live.where((p) => p.status == 'cesto').toList();
+
+  // ---------------------------------------------------------------- persistência
+  Future<void> load() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final f = File('${dir.path}/armario_virtual.json');
+      _file = f;
+      if (await f.exists()) {
+        _fromJson(Map<String, dynamic>.from(jsonDecode(await f.readAsString()) as Map));
+      } else {
+        seed();
+        await _save();
+      }
+    } catch (e) {
+      debugPrint('Erro ao carregar dados: $e');
+      if (items.isEmpty) seed();
+    }
+    loaded = true;
+    notifyListeners();
+  }
+
+  Future<void> _save() async {
+    final f = _file;
+    if (f == null) return;
+    try {
+      await f.writeAsString(jsonEncode(_toJson()));
+    } catch (e) {
+      debugPrint('Erro ao salvar dados: $e');
+    }
+  }
+
+  void commit() {
+    notifyListeners();
+    _save();
+  }
+
+  Map<String, dynamic> _toJson() => {
+        'v': 1,
+        'items': items.map((e) => e.toJson()).toList(),
+        'looks': looks.map((e) => e.toJson()).toList(),
+        'log': log.map((e) => e.toJson()).toList(),
+        'lookLog': lookLog.map((e) => e.toJson()).toList(),
+        'washes': washes.map((e) => e.toJson()).toList(),
+        'removals': removals.map((e) => e.toJson()).toList(),
+        'customTypes': customTypes.map((e) => e.toJson()).toList(),
+        'customColors': customColors.map((e) => e.toJson()).toList(),
+        'extraTags': extraTags,
+        'rules': rules,
+        'profileName': profileName,
+        'cols': cols,
+      };
+
+  void _fromJson(Map<String, dynamic> j) {
+    List<Map<String, dynamic>> l(String k) => ((j[k] as List?) ?? const [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    items = l('items').map(Piece.fromJson).toList();
+    looks = l('looks').map(Look.fromJson).toList();
+    log = l('log').map(UseLog.fromJson).toList();
+    lookLog = l('lookLog').map(LookLog.fromJson).toList();
+    washes = l('washes').map(Wash.fromJson).toList();
+    removals = l('removals').map(Removal.fromJson).toList();
+    customTypes = l('customTypes').map(PieceType.fromJson).toList();
+    customColors = l('customColors').map(ColorTag.fromJson).toList();
+    extraTags = ((j['extraTags'] as List?) ?? const []).map((e) => e.toString()).toList();
+    rules = {};
+    final r = j['rules'];
+    if (r is Map) {
+      r.forEach((k, v) => rules[k.toString()] = v.toString());
+    }
+    profileName = (j['profileName'] as String?) ?? '';
+    cols = (j['cols'] as num?)?.toInt() ?? 2;
+  }
+
+  String exportJson() => const JsonEncoder.withIndent('  ').convert(_toJson());
+
+  String exportCsv() {
+    String q(String s) => '"${s.replaceAll('"', '""')}"';
+    final b = StringBuffer('peca;tipo;cores;tags;status;usos_total;usos_desde_lavagem;ultimo_uso;ultima_lavagem\n');
+    for (final p in live) {
+      b.writeln([
+        q(p.name),
+        q(typeOf(p).name),
+        q(p.colors.map((c) => c.name).join(', ')),
+        q(p.tags.join(', ')),
+        q(statusMeta(p.status).label),
+        p.total,
+        p.since,
+        p.lastUse == null ? '' : dateOf(p.lastUse!).toIso8601String().substring(0, 10),
+        p.lastWash == null ? '' : dateOf(p.lastWash!).toIso8601String().substring(0, 10),
+      ].join(';'));
+    }
+    return b.toString();
+  }
+
+  // ---------------------------------------------------------------- dados de exemplo
+  void seed() {
+    final t = todayDay();
+    // id, nome, tipo, cores, status, usos, desde lavagem, último uso (dias), lavagens, tags, estampada, forma
+    final raw = <List<Object?>>[
+      ['p1', 'Camiseta azul-marinho', 'camiseta', [const ColorTag('Azul', 0xFF26406A)], 'guardado', 3, 1, -6, 1, ['básico'], false, null],
+      ['p2', 'Camisa branca de linho', 'camisa', [const ColorTag('Branco', 0xFFF5F3EE)], 'guardado', 1, 0, -41, 1, ['trabalho'], false, null],
+      ['p3', 'Jaqueta jeans', 'jaqueta', [const ColorTag('Azul', 0xFF5D80A8)], 'guardado', 5, 3, -9, 1, ['meia-estação'], false, null],
+      ['p4', 'Calça preta reta', 'calca', [const ColorTag('Preto', 0xFF25292D)], 'emUso', 8, 2, -1, 3, ['trabalho'], false, null],
+      ['p5', 'Bermuda bege', 'bermuda', [const ColorTag('Bege', 0xFFD9C4A0)], 'guardado', 2, 1, -23, 1, ['verão'], false, null],
+      ['p6', 'Vestido floral', 'vestido', [const ColorTag('Rosa', 0xFFE8A6B6), const ColorTag('Verde', 0xFF4F7A5A)], 'guardado', 1, 0, -58, 1, ['verão'], true, null],
+      ['p7', 'Tênis branco', 'tenis', [const ColorTag('Branco', 0xFFF4F4F2)], 'emUso', 12, 4, -1, 2, ['básico'], false, null],
+      ['p8', 'Relógio prata', 'relogio', [const ColorTag('Prata', 0xFFB9C0C6)], 'guardado', 18, 5, -1, 0, <String>[], false, null],
+      ['p9', 'Bolsa marrom', 'bolsa', [const ColorTag('Marrom', 0xFF7B5336)], 'guardado', 6, 2, -12, 1, ['couro'], false, null],
+      ['p10', 'Moletom cinza', 'moletom', [const ColorTag('Cinza', 0xFF9AA3A8)], 'cesto', 9, 3, -4, 2, ['inverno'], false, null],
+      ['p11', 'Sandália caramelo', 'sandalia', [const ColorTag('Caramelo', 0xFFB9773F)], 'guardado', 2, 2, -30, 0, ['verão'], false, null],
+    ];
+    items = [];
+    log = [];
+    washes = [];
+    lookLog = [];
+    removals = [];
+    customTypes = [];
+    customColors = [];
+    extraTags = [];
+    rules = {};
+    undo = null;
+    sel = Selection();
+    focus.clear();
+    profileName = 'Alex';
+    cols = 2;
+
+    var ix = 0;
+    for (final a in raw) {
+      final n = a[5] as int;
+      final since = a[6] as int;
+      final last = a[7] as int;
+      final w = a[8] as int;
+      final p = Piece(
+        id: a[0] as String,
+        name: a[1] as String,
+        typeId: a[2] as String,
+        colors: List<ColorTag>.from(a[3] as List),
+        status: a[4] as String,
+        total: n,
+        since: since,
+        tags: List<String>.from(a[9] as List),
+        patterned: a[10] as bool,
+        shape: a[11] as String?,
+      );
+      var r = ((ix + 3) * 7919) % 233280;
+      ix++;
+      double rnd() {
+        r = (r * 9301 + 49297) % 233280;
+        return r / 233280;
+      }
+
+      final days = <int>[];
+      var d = t + last;
+      final double avg = n > 1 ? (300 + last) / n : 0.0;
+      for (var k = 0; k < n; k++) {
+        days.add(d);
+        d -= math.max(1, (avg * (0.55 + 0.9 * rnd())).round());
+      }
+      for (final x in days) {
+        log.add(UseLog(p.id, x));
+      }
+      p.lastUse = n > 0 ? days.first : null;
+      final u = n - since;
+      if (w > 0 && u > 0) {
+        final per = u / w;
+        var used = 0;
+        for (var j = 0; j < w; j++) {
+          final idx = math.min(n - 1, since + (per * j).round());
+          final uses = j < w - 1 ? math.max(1, per.round()) : math.max(1, u - used);
+          used += per.round();
+          final wd = math.min(t, days[idx] + 1);
+          washes.add(Wash(p.id, wd, uses));
+          if (j == 0) p.lastWash = wd;
+        }
+      }
+      items.add(p);
+    }
+
+    looks = [
+      Look(id: 'l1', name: 'Casual urbano', occasion: 'Dia a dia', fav: true, cima: ['p1'], baixo: ['p4'], calcado: 'p7', acess: ['p8'], uses: 4),
+      Look(id: 'l2', name: 'Trabalho leve', occasion: 'Trabalho', cima: ['p2'], baixo: ['p4'], calcado: 'p7', uses: 2),
+      Look(id: 'l3', name: 'Fim de semana', occasion: 'Lazer', cima: ['p10'], baixo: ['p5'], calcado: 'p7', uses: 1),
+      Look(id: 'l4', name: 'Dia quente', occasion: 'Passeio', fav: true, cima: ['p6'], baixo: ['p6'], calcado: 'p11', acess: ['p9'], uses: 0),
+    ];
+    for (final lk in looks) {
+      final base = lk.cima.isNotEmpty ? lk.cima.first : (lk.baixo.isNotEmpty ? lk.baixo.first : null);
+      if (base == null) continue;
+      final ds = log.where((l) => l.itemId == base).map((l) => l.day).toList();
+      ds.sort((a, b) => b.compareTo(a));
+      for (final day in ds.take(lk.uses)) {
+        lookLog.add(LookLog(lk.id, day));
+      }
+    }
+  }
+
+  void reseed() {
+    seed();
+    commit();
+  }
+
+  void wipe() {
+    items = [];
+    looks = [];
+    log = [];
+    lookLog = [];
+    washes = [];
+    removals = [];
+    customTypes = [];
+    customColors = [];
+    extraTags = [];
+    rules = {};
+    undo = null;
+    sel = Selection();
+    focus.clear();
+    commit();
+  }
+
+  // ---------------------------------------------------------------- Início: seleção
+  bool _inSection(String key, String cat) {
+    switch (key) {
+      case 'cima':
+        return cat == 'cima' || cat == 'unica';
+      case 'baixo':
+        return cat == 'baixo' || cat == 'unica';
+      case 'calcado':
+        return cat == 'calcado';
+      default:
+        return cat == 'acessorio' || cat == 'outros';
+    }
+  }
+
+  List<Piece> sectionItems(String key) {
+    final l = live
+        .where((p) => (p.status == 'guardado' || p.status == 'emUso') && _inSection(key, catOf(p)))
+        .toList();
+    l.sort((a, b) {
+      final c = a.total.compareTo(b.total);
+      return c != 0 ? c : a.name.compareTo(b.name);
+    });
+    return l;
+  }
+
+  bool isOnePiece(String id) {
+    final p = byId(id);
+    return p != null && catOf(p) == 'unica';
+  }
+
+  List<String?> layersOf(String key) => key == 'cima' ? sel.cima : sel.baixo;
+
+  String? slotId(String key) {
+    switch (key) {
+      case 'cima':
+        return sel.cima[sel.layer['cima']!];
+      case 'baixo':
+        return sel.baixo[sel.layer['baixo']!];
+      case 'calcado':
+        return sel.calcado;
+      default:
+        return null;
+    }
+  }
+
+  String _focusKey(String key) => (key == 'cima' || key == 'baixo') ? '$key${sel.layer[key]}' : key;
+
+  int focusIndex(String key, List<Piece> list) {
+    if (list.isEmpty) return 0;
+    final id = slotId(key);
+    if (id != null) {
+      final i = list.indexWhere((p) => p.id == id);
+      if (i >= 0) return i;
+    }
+    final f = focus[_focusKey(key)] ?? 0;
+    return math.min(math.max(f, 0), list.length - 1);
+  }
+
+  void pick(String key, String id, {bool toggle = true}) {
+    if (key == 'cima' || key == 'baixo') {
+      final otherKey = key == 'cima' ? 'baixo' : 'cima';
+      final arr = layersOf(key);
+      final other = layersOf(otherKey);
+      final l = sel.layer[key]!;
+      final ol = sel.layer[otherKey]!;
+      final prev = arr[l];
+      void dropOther(String x) {
+        for (var i = 0; i < other.length; i++) {
+          if (other[i] == x) other[i] = null;
+        }
+      }
+
+      if (prev == id) {
+        if (!toggle) return;
+        arr[l] = null;
+        if (isOnePiece(id)) dropOther(id);
+      } else {
+        final ix = arr.indexOf(id);
+        if (ix >= 0) arr[ix] = null;
+        arr[l] = id;
+        if (prev != null && isOnePiece(prev)) dropOther(prev);
+        if (isOnePiece(id)) {
+          dropOther(id);
+          other[math.min(ol, other.length - 1)] = id;
+        }
+      }
+      final one = isOnePiece(id);
+      sel.missing.removeWhere((m) => m.startsWith('$key|') || (one && m.startsWith('$otherKey|')));
+    } else if (key == 'acess') {
+      if (sel.acess.contains(id)) {
+        if (toggle) sel.acess.remove(id);
+      } else {
+        sel.acess.add(id);
+      }
+      sel.missing.removeWhere((m) => m.startsWith('acess|'));
+    } else {
+      if (sel.calcado == id) {
+        if (toggle) sel.calcado = null;
+      } else {
+        sel.calcado = id;
+      }
+      sel.missing.removeWhere((m) => m.startsWith('calcado|'));
+    }
+    notifyListeners();
+  }
+
+  /// O carrossel parou em [index]. Se a camada já tem peça, troca por esta.
+  void carouselMoved(String key, List<Piece> list, int index) {
+    if (index < 0 || index >= list.length) return;
+    if (slotId(key) != null) {
+      if (slotId(key) != list[index].id) pick(key, list[index].id, toggle: false);
+    } else {
+      focus[_focusKey(key)] = index;
+      notifyListeners();
+    }
+  }
+
+  void tapCenter(String key, List<Piece> list, int index) {
+    if (index < 0 || index >= list.length) return;
+    focus[_focusKey(key)] = index;
+    pick(key, list[index].id);
+  }
+
+  void setLayer(String key, int i) {
+    sel.layer[key] = i;
+    notifyListeners();
+  }
+
+  void addLayer(String key) {
+    final arr = layersOf(key);
+    if (arr.length >= 3) return;
+    arr.add(null);
+    sel.layer[key] = arr.length - 1;
+    notifyListeners();
+  }
+
+  void removeLayer(String key) {
+    final arr = layersOf(key);
+    if (arr.length <= 1) return;
+    final l = sel.layer[key]!;
+    arr.removeAt(l);
+    sel.layer[key] = math.max(0, l - 1);
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    sel = Selection();
+    focus.clear();
+    notifyListeners();
+  }
+
+  bool usedOn(String id, int day) => log.any((l) => l.itemId == id && l.day == day);
+
+  /// Registra o uso das peças selecionadas. Retorna (registradas, já existentes).
+  (int, int) confirmUse(int day) {
+    final ids = sel.ids();
+    var ok = 0;
+    var dup = 0;
+    for (final id in ids) {
+      final p = byId(id);
+      if (p == null) continue;
+      if (usedOn(id, day)) {
+        dup++;
+        continue;
+      }
+      ok++;
+      log.add(UseLog(id, day));
+      p.total++;
+      p.since++;
+      p.lastUse = math.max(p.lastUse ?? -1, day);
+      p.status = 'emUso';
+    }
+    final fl = sel.fromLook;
+    if (fl != null && ok > 0) {
+      final lk = lookById(fl);
+      if (lk != null) {
+        lk.uses++;
+        if (!lookLog.any((x) => x.lookId == fl && x.day == day)) lookLog.add(LookLog(fl, day));
+      }
+    }
+    sel = Selection();
+    focus.clear();
+    commit();
+    return (ok, dup);
+  }
+
+  // ---------------------------------------------------------------- Pilha e Cesto
+  void sendPilha(String id, String dest) {
+    final p = byId(id);
+    if (p == null) return;
+    undo = [MapEntry(id, p.status)];
+    p.status = dest;
+    commit();
+  }
+
+  (int, int) autoDecide() {
+    final list = pilha;
+    if (list.isEmpty) return (0, 0);
+    undo = list.map((p) => MapEntry(p.id, p.status)).toList();
+    var c = 0;
+    var g = 0;
+    for (final p in list) {
+      final r = ruleOf(p);
+      if (r == 'cesto') {
+        c++;
+      } else {
+        g++;
+      }
+      p.status = r;
+    }
+    commit();
+    return (c, g);
+  }
+
+  void doUndo() {
+    final u = undo;
+    if (u == null) return;
+    for (final e in u) {
+      final p = byId(e.key);
+      if (p != null) p.status = e.value;
+    }
+    undo = null;
+    commit();
+  }
+
+  void setStatus(String id, String status) {
+    final p = byId(id);
+    if (p == null) return;
+    p.status = status;
+    commit();
+  }
+
+  void wash(List<String> ids) {
+    final t = todayDay();
+    for (final id in ids) {
+      final p = byId(id);
+      if (p == null) continue;
+      washes.add(Wash(id, t, p.since));
+      p.since = 0;
+      p.lastWash = t;
+      p.status = 'guardado';
+    }
+    commit();
+  }
+
+  // ---------------------------------------------------------------- Looks
+  void useLook(String id) {
+    final lk = lookById(id);
+    if (lk == null) return;
+    bool ok(String? x) {
+      final p = byId(x);
+      return p != null && !p.deleted && p.status != 'cesto';
+    }
+
+    final miss = <String>[];
+    void mark(String? x, String sec) {
+      final p = byId(x);
+      if (p != null && !p.deleted && p.status == 'cesto') {
+        final entry = '$sec|${p.name}';
+        if (!miss.any((m) => m.endsWith('|${p.name}'))) miss.add(entry);
+      }
+    }
+
+    for (final x in lk.cima) {
+      mark(x, 'cima');
+    }
+    for (final x in lk.baixo) {
+      mark(x, 'baixo');
+    }
+    mark(lk.calcado, 'calcado');
+    for (final x in lk.acess) {
+      mark(x, 'acess');
+    }
+    final s = Selection();
+    s.cima = lk.cima.isEmpty ? <String?>[null] : lk.cima.map<String?>((x) => ok(x) ? x : null).toList();
+    s.baixo = lk.baixo.isEmpty ? <String?>[null] : lk.baixo.map<String?>((x) => ok(x) ? x : null).toList();
+    s.calcado = ok(lk.calcado) ? lk.calcado : null;
+    s.acess = lk.acess.where((x) => ok(x)).toList();
+    s.layer = {'cima': math.max(0, s.cima.indexOf(null)), 'baixo': math.max(0, s.baixo.indexOf(null))};
+    s.fromLook = id;
+    s.missing = miss;
+    sel = s;
+    focus.clear();
+    notifyListeners();
+    tabIndex.value = 1;
+  }
+
+  void saveLook(String name, String occasion) {
+    final id = 'l${DateTime.now().millisecondsSinceEpoch}';
+    looks.add(Look(
+      id: id,
+      name: name,
+      occasion: occasion,
+      cima: sel.cima.whereType<String>().toList(),
+      baixo: sel.baixo.whereType<String>().toList(),
+      calcado: sel.calcado,
+      acess: List<String>.of(sel.acess),
+    ));
+    sel.fromLook = id;
+    commit();
+  }
+
+  void toggleFav(String id) {
+    final l = lookById(id);
+    if (l == null) return;
+    l.fav = !l.fav;
+    commit();
+  }
+
+  void duplicateLook(String id) {
+    final l = lookById(id);
+    if (l == null) return;
+    looks.add(Look(
+      id: 'l${DateTime.now().millisecondsSinceEpoch}',
+      name: '${l.name} (cópia)',
+      occasion: l.occasion,
+      cima: List<String>.of(l.cima),
+      baixo: List<String>.of(l.baixo),
+      calcado: l.calcado,
+      acess: List<String>.of(l.acess),
+    ));
+    commit();
+  }
+
+  void deleteLook(String id) {
+    looks.removeWhere((l) => l.id == id);
+    lookLog.removeWhere((l) => l.lookId == id);
+    commit();
+  }
+
+  // ---------------------------------------------------------------- Peças
+  void addPiece({
+    required String name,
+    required String typeId,
+    required List<ColorTag> colors,
+    required List<String> tags,
+    required bool patterned,
+    required String status,
+    String? photoPath,
+  }) {
+    items.add(Piece(
+      id: 'n${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      typeId: typeId,
+      colors: List<ColorTag>.of(colors),
+      tags: List<String>.of(tags),
+      patterned: patterned,
+      status: status,
+      photoPath: photoPath,
+    ));
+    commit();
+  }
+
+  void updatePiece(
+    String id, {
+    required String name,
+    required String typeId,
+    required List<ColorTag> colors,
+    required List<String> tags,
+    required bool patterned,
+    required String status,
+    String? photoPath,
+  }) {
+    final p = byId(id);
+    if (p == null) return;
+    p.name = name;
+    if (p.typeId != typeId) p.shape = null;
+    p.typeId = typeId;
+    p.colors = List<ColorTag>.of(colors);
+    p.tags = List<String>.of(tags);
+    p.patterned = patterned;
+    p.status = status;
+    p.photoPath = photoPath;
+    commit();
+  }
+
+  void deletePiece(String id, String reason) {
+    final p = byId(id);
+    if (p == null) return;
+    p.deleted = true;
+    removals.add(Removal(id, reason, todayDay()));
+    for (final arr in [sel.cima, sel.baixo]) {
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i] == id) arr[i] = null;
+      }
+    }
+    if (sel.calcado == id) sel.calcado = null;
+    sel.acess.remove(id);
+    commit();
+  }
+
+  void setPieceRule(String id, String rule) {
+    final p = byId(id);
+    if (p == null) return;
+    p.rule = rule == typeRule(p.typeId) ? null : rule;
+    commit();
+  }
+
+  void setTypeRule(String typeId, String rule) {
+    rules[typeId] = rule;
+    commit();
+  }
+
+  /// Cria um tipo. Retorna a mensagem de erro, ou null se deu certo.
+  String? addType(String name, String cat, String rule, void Function(String id) onCreated) {
+    final n = name.trim();
+    if (n.isEmpty) return 'Informe o nome do tipo.';
+    if (allTypes.any((t) => norm(t.name) == norm(n))) return 'Já existe um tipo com esse nome.';
+    final id = 't${DateTime.now().millisecondsSinceEpoch}';
+    customTypes.add(PieceType(id, n, cat, rule, kCatShape[cat] ?? 'tee', custom: true));
+    commit();
+    onCreated(id);
+    return null;
+  }
+
+  String? addColor(String name, int hex, void Function(ColorTag c) onCreated) {
+    final n = name.trim();
+    if (n.isEmpty) return 'Dê um nome à cor.';
+    if (allColors.any((c) => norm(c.name) == norm(n))) return 'Já existe uma cor com esse nome.';
+    final c = ColorTag(n, hex);
+    customColors.add(c);
+    commit();
+    onCreated(c);
+    return null;
+  }
+
+  void addExtraTag(String t) {
+    if (!extraTags.contains(t)) {
+      extraTags.add(t);
+      commit();
+    }
+  }
+
+  void setName(String v) {
+    profileName = v;
+    commit();
+  }
+
+  void setCols(int c) {
+    cols = c;
+    commit();
+  }
+}

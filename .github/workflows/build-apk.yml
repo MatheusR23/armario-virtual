@@ -1,0 +1,75 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Gerar projeto Android e compilar
+        run: |
+          set -o pipefail
+          {
+            flutter --version
+            flutter create . --platforms=android --org com.armariovirtual --project-name armario_virtual
+            rm -f test/widget_test.dart
+            python3 .github/scripts/patch_android.py
+            flutter pub get
+            flutter build apk --release
+            cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/armario-virtual.apk
+          } 2>&1 | tee build.log
+
+      - name: Publicar APK numa versão (release)
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Armário Virtual 1.0.${{ github.run_number }}
+          body: Baixe o arquivo armario-virtual.apk abaixo e abra no celular Android para instalar.
+          files: build/app/outputs/flutter-apk/armario-virtual.apk
+
+      - name: Guardar APK como artefato
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: armario-virtual-apk
+          path: build/app/outputs/flutter-apk/armario-virtual.apk
+
+      - name: Salvar log de erro na branch ci-logs
+        if: failure()
+        run: |
+          mkdir -p /tmp/ci
+          cp build.log /tmp/ci/last-build.log 2>/dev/null || echo "sem log" > /tmp/ci/last-build.log
+          (flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tail -300) > /tmp/ci/analyze.log || true
+          git config user.name "ci"
+          git config user.email "ci@users.noreply.github.com"
+          git stash --include-untracked || true
+          git checkout --orphan ci-logs
+          git rm -rf --cached . > /dev/null 2>&1 || true
+          mkdir -p ci && cp /tmp/ci/*.log ci/
+          echo "${{ github.sha }}" > ci/commit.txt
+          git add -f ci/
+          git commit -m "Log da compilação ${{ github.run_number }}"
+          git push -f origin ci-logs

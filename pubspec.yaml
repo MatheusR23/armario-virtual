@@ -1,0 +1,24 @@
+name: armario_virtual
+description: "Armário Virtual: controle de roupas, looks, usos e lavagens."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  path_provider: ^2.1.4
+  image_picker: ^1.1.2
+  path_drawing: ^1.0.1
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
