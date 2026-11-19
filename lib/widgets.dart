@@ -85,7 +85,7 @@ class PieceArt extends StatelessWidget {
     final hasPhoto = path != null && File(path).existsSync();
     Widget child;
     if (hasPhoto) {
-      child = Image.file(File(path!), fit: BoxFit.cover, width: double.infinity, height: double.infinity);
+      child = Image.file(File(path), fit: BoxFit.cover, width: double.infinity, height: double.infinity);
     } else {
       child = Padding(
         padding: EdgeInsets.all(padding),

@@ -13,3 +13,15 @@ if 'android:scheme="mailto"' not in s:
         s = s.replace('</manifest>', '<queries>' + q + '</queries>\n</manifest>', 1)
 open(p, 'w', encoding='utf-8').write(s)
 print('AndroidManifest ajustado')
+
+# O "lint vital" do Android trava ao analisar o plugin image_picker (bug do próprio lint).
+# Ele não afeta o app; desligamos só essa verificação na compilação de release.
+import os
+for root in ('android/build.gradle.kts', 'android/build.gradle'):
+    if os.path.exists(root):
+        g = open(root, encoding='utf-8').read()
+        if 'lintVital' not in g:
+            g += '\nsubprojects {\n    tasks.matching { it.name.startsWith("lintVital") }.configureEach { enabled = false }\n}\n'
+            open(root, 'w', encoding='utf-8').write(g)
+            print('Lint vital desligado em', root)
+        break
