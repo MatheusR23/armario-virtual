@@ -136,7 +136,7 @@ class _MissingBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${joinNames(names)} $verb no cesto. Escolha uma substituta ou siga sem ela.',
+              '${joinNames(names)} $verb no cesto.',
               style: const TextStyle(color: C.warningFg, fontSize: 14),
             ),
           ),

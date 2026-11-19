@@ -637,7 +637,7 @@ class Store extends ChangeNotifier {
     tabIndex.value = 1;
   }
 
-  void saveLook(String name, String occasion) {
+  void saveLook(String name, String occasion, {List<ColorTag> colors = const [], String? photoPath}) {
     final id = 'l${DateTime.now().millisecondsSinceEpoch}';
     looks.add(Look(
       id: id,
@@ -647,9 +647,45 @@ class Store extends ChangeNotifier {
       baixo: sel.baixo.whereType<String>().toList(),
       calcado: sel.calcado,
       acess: List<String>.of(sel.acess),
+      colors: List<ColorTag>.of(colors),
+      photoPath: photoPath,
     ));
     sel.fromLook = id;
     commit();
+  }
+
+  void updateLook(String id,
+      {required String name, required String occasion, required List<ColorTag> colors, String? photoPath}) {
+    final l = lookById(id);
+    if (l == null) return;
+    l.name = name;
+    l.occasion = occasion;
+    l.colors = List<ColorTag>.of(colors);
+    l.photoPath = photoPath;
+    commit();
+  }
+
+  /// Cores do look: as escolhidas ou, se nenhuma, as das peças (sem repetir nome).
+  List<ColorTag> lookColors(Look l) {
+    if (l.colors.isNotEmpty) return l.colors;
+    final out = <ColorTag>[];
+    for (final id in l.pieceIds()) {
+      final p = byId(id);
+      if (p == null || p.deleted) continue;
+      for (final c in p.colors) {
+        if (!out.any((x) => x.name == c.name)) out.add(c);
+      }
+    }
+    return out;
+  }
+
+  /// Ocasiões já usadas nos looks, mais as padrão.
+  List<String> get occasions {
+    final s = <String>[...kOccasions];
+    for (final l in looks) {
+      if (l.occasion.isNotEmpty && !s.contains(l.occasion)) s.add(l.occasion);
+    }
+    return s;
   }
 
   void toggleFav(String id) {
@@ -670,6 +706,8 @@ class Store extends ChangeNotifier {
       baixo: List<String>.of(l.baixo),
       calcado: l.calcado,
       acess: List<String>.of(l.acess),
+      colors: List<ColorTag>.of(l.colors),
+      photoPath: l.photoPath,
     ));
     commit();
   }

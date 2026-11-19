@@ -75,7 +75,7 @@ class _TrackingPageState extends State<TrackingPage> {
           const Text('Rastreio', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
           EmptyState(
             icon: Icons.bar_chart_rounded,
-            text: 'Registre usos para acompanhar seus padrões.',
+            text: 'Nenhum uso registrado.',
             actionLabel: 'Montar roupas de hoje',
             onAction: () => tabIndex.value = 1,
           ),
@@ -99,21 +99,20 @@ class _TrackingPageState extends State<TrackingPage> {
 
     final insights = <(String, String, VoidCallback)>[
       if (top != null)
-        ('Mais usada', '${top.name} é sua peça mais usada $phrase, com ${plural(counts[top.id]!, 'uso', 'usos')}.',
+        ('Mais usada', '${top.name} · ${plural(counts[top.id]!, 'uso', 'usos')}',
             () => showPieceDetail(context, top.id)),
       if (stale.isNotEmpty)
         (
           'Esquecida',
           stale.first.lastUse == null
-              ? '${stale.first.name} ainda não foi usada.'
-              : '${stale.first.name} está há ${t - stale.first.lastUse!} dias sem ser usada.',
+              ? '${stale.first.name} · nunca usada'
+              : '${stale.first.name} · ${t - stale.first.lastUse!} dias',
           () => showPieceDetail(context, stale.first.id)
         ),
       if (cimaW.isNotEmpty)
-        ('Antes de lavar', 'Você costuma usar peças de cima ${nf(avg(cimaW))} vezes antes de lavá-las.',
-            () => setState(() => _cat = 'cima')),
+        ('Antes de lavar', 'Peças de cima: ${nf(avg(cimaW))} usos', () => setState(() => _cat = 'cima')),
       if (topLook != null && topLook.uses > 0)
-        ('Look favorito', 'O look ${topLook.name} foi usado ${plural(topLook.uses, 'vez', 'vezes')} até agora.',
+        ('Look favorito', '${topLook.name} · ${plural(topLook.uses, 'uso', 'usos')}',
             () => showLookDialog(context, topLook.id)),
     ];
 
@@ -595,8 +594,7 @@ class _TrackingPageState extends State<TrackingPage> {
     showAppSheet(context, (ctx) {
       if (_calKind == 'peca') {
         return SheetFrame(
-          title: 'Peças e acessórios',
-          subtitle: 'Escolha o que mostrar no calendário.',
+          title: 'Peças',
           child: GalleryGrid(
             pieces: pieces,
             selectedIds: [if (_calTarget != null) _calTarget!],
@@ -612,7 +610,6 @@ class _TrackingPageState extends State<TrackingPage> {
       }
       return SheetFrame(
         title: 'Looks',
-        subtitle: 'Escolha o que mostrar no calendário.',
         child: GridView.count(
           crossAxisCount: 3,
           shrinkWrap: true,

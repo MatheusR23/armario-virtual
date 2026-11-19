@@ -74,8 +74,7 @@ class _MenuPageState extends State<MenuPage> {
               padding: EdgeInsets.zero,
               child: ListTile(
                 leading: const Icon(Icons.shopping_basket_outlined, color: C.primaryDark),
-                title: const Text('Regras pós-uso por tipo', style: TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: const Text('Para onde cada tipo vai depois de usado'),
+                title: const Text('Regras pós-uso', style: TextStyle(fontWeight: FontWeight.w600)),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => showAppSheet(context, (_) => const RulesSheet()),
               ),
@@ -107,16 +106,16 @@ class _MenuPageState extends State<MenuPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                     child: Text(
-                      'Neste celular: ${plural(store.live.length, 'peça', 'peças')}, ${plural(store.looks.length, 'look', 'looks')}, '
-                      '${plural(store.log.length, 'uso registrado', 'usos registrados')} e ${plural(store.washes.length, 'lavagem', 'lavagens')}.',
+                      '${plural(store.live.length, 'peça', 'peças')} · ${plural(store.looks.length, 'look', 'looks')} · '
+                      '${plural(store.log.length, 'uso', 'usos')}',
                       style: const TextStyle(fontSize: 14, color: C.text2),
                     ),
                   ),
                   _action(
                     id: 'save',
                     icon: Icons.save_alt_rounded,
-                    title: 'Salvar backup no celular',
-                    subtitle: 'Arquivo .zip com dados e fotos',
+                    title: 'Salvar backup',
+                    subtitle: 'Dados e fotos (.zip)',
                     run: () async {
                       final ok = await saveBackupToFile();
                       if (ok && mounted) toast(this.context, 'Backup salvo.');
@@ -126,32 +125,32 @@ class _MenuPageState extends State<MenuPage> {
                     id: 'share',
                     icon: Icons.ios_share_rounded,
                     title: 'Enviar backup',
-                    subtitle: 'Por e-mail, WhatsApp, Drive…',
+                    subtitle: 'E-mail, WhatsApp, Drive…',
                     run: shareBackup,
                   ),
                   _action(
                     id: 'restore',
                     icon: Icons.settings_backup_restore_rounded,
                     title: 'Restaurar backup',
-                    subtitle: 'Substitui os dados deste celular',
+                    subtitle: 'Substitui os dados atuais',
                     run: _restore,
                   ),
                   _action(
                     id: 'csv',
                     icon: Icons.table_chart_outlined,
-                    title: 'Enviar relatório (CSV)',
-                    subtitle: 'Planilha com as peças e usos',
+                    title: 'Enviar relatório',
+                    subtitle: 'Planilha (.csv)',
                     run: shareCsv,
                   ),
                   ListTile(
                     leading: const Icon(Icons.refresh_rounded, color: C.primaryDark),
-                    title: const Text('Recriar dados demonstrativos', style: TextStyle(fontWeight: FontWeight.w600)),
+                    title: const Text('Dados de exemplo', style: TextStyle(fontWeight: FontWeight.w600)),
                     onTap: () async {
                       final ok = await confirmDialog(
                         context,
-                        title: 'Recriar dados demonstrativos?',
-                        text: 'Peças, looks e histórico voltam ao exemplo inicial. O que você cadastrou será substituído.',
-                        confirmLabel: 'Recriar dados',
+                        title: 'Usar dados de exemplo?',
+                        text: 'Seus dados serão substituídos.',
+                        confirmLabel: 'Substituir',
                         danger: true,
                       );
                       if (ok) {
@@ -168,7 +167,7 @@ class _MenuPageState extends State<MenuPage> {
                       final ok = await confirmDialog(
                         context,
                         title: 'Apagar todos os dados?',
-                        text: 'Peças, fotos, looks e histórico serão removidos deste celular. Essa ação não pode ser desfeita. Salve um backup antes, se quiser.',
+                        text: 'Não é possível desfazer.',
                         confirmLabel: 'Apagar tudo',
                         danger: true,
                       );
@@ -189,7 +188,6 @@ class _MenuPageState extends State<MenuPage> {
                     maxLines: 6,
                     decoration: const InputDecoration(
                       labelText: 'Sua mensagem',
-                      hintText: 'Conte o que funcionou, o que faltou ou um problema que encontrou.',
                       alignLabelWithHint: true,
                     ),
                   ),
@@ -204,7 +202,7 @@ class _MenuPageState extends State<MenuPage> {
             ),
             const SizedBox(height: 24),
             const Center(
-              child: Text('Armário Virtual · MVP · funciona offline', style: TextStyle(fontSize: 12, color: C.text2)),
+              child: Text('Armário Virtual', style: TextStyle(fontSize: 12, color: C.text2)),
             ),
           ],
         );
@@ -249,10 +247,10 @@ class _MenuPageState extends State<MenuPage> {
     if (pending == null || !mounted) return;
     final ok = await confirmDialog(
       context,
-      title: 'Restaurar este backup?',
-      text: 'O backup tem ${plural(pending.pieces, 'peça', 'peças')}, ${plural(pending.looks, 'look', 'looks')}, '
-          '${plural(pending.uses, 'uso registrado', 'usos registrados')} e ${plural(pending.photos, 'foto', 'fotos')}. '
-          'Os dados atuais deste celular serão substituídos. Essa ação não pode ser desfeita.',
+      title: 'Restaurar backup?',
+      text: '${plural(pending.pieces, 'peça', 'peças')} · ${plural(pending.looks, 'look', 'looks')} · '
+          '${plural(pending.uses, 'uso', 'usos')} · ${plural(pending.photos, 'foto', 'fotos')}\n\n'
+          'Os dados atuais serão substituídos.',
       confirmLabel: 'Restaurar',
       danger: true,
     );
@@ -260,7 +258,7 @@ class _MenuPageState extends State<MenuPage> {
     final info = await pending.apply();
     _name.text = store.profileName;
     if (mounted) {
-      toast(context, 'Backup restaurado: ${plural(info.pieces, 'peça', 'peças')} e ${plural(info.photos, 'foto', 'fotos')}.');
+      toast(context, 'Backup restaurado.');
     }
   }
 
@@ -280,7 +278,6 @@ class RulesSheet extends StatelessWidget {
       listenable: store,
       builder: (context, _) => SheetFrame(
         title: 'Regras pós-uso',
-        subtitle: 'A regra de uma peça, se definida, vale mais que a do tipo.',
         child: Column(
           children: [
             for (final t in store.allTypes)

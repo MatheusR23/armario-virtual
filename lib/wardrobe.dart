@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'catalog.dart';
@@ -14,27 +16,86 @@ class WardrobePage extends StatefulWidget {
   State<WardrobePage> createState() => _WardrobePageState();
 }
 
+/// Cor disponível como filtro: nome, tom de exemplo e quantos itens têm a cor.
+class _ColorOption {
+  final ColorTag color;
+  int count;
+  _ColorOption(this.color, this.count);
+}
+
+List<_ColorOption> _colorOptions(Iterable<List<ColorTag>> lists) {
+  final out = <String, _ColorOption>{};
+  for (final l in lists) {
+    for (final c in {for (final c in l) c.name: c}.values) {
+      out.putIfAbsent(c.name, () => _ColorOption(c, 0)).count++;
+    }
+  }
+  final list = out.values.toList()..sort((a, b) => b.count.compareTo(a.count));
+  return list;
+}
+
 class _WardrobePageState extends State<WardrobePage> {
   String _seg = 'roupas';
+
+  // ---- filtros de roupas
   String _q = '';
   final Set<String> _status = {'guardado'};
+  final Set<String> _colors = {};
+  final Set<String> _types = {};
   final Set<String> _tags = {};
+  final Set<String> _pattern = {}; // vazio, {lisa} ou {estampada}
   String _sort = 'menos';
   final _search = TextEditingController();
 
-  static const _sortLabels = {'menos': 'Menos usadas', 'mais': 'Mais usadas', 'recentes': 'Usadas recentemente'};
+  // ---- filtros de looks
+  String _lq = '';
+  final Set<String> _lColors = {};
+  final Set<String> _lOcc = {};
+  bool _lFav = false;
+  final _lSearch = TextEditingController();
+
+  static const _sortLabels = {'menos': 'Menos usadas', 'mais': 'Mais usadas', 'recentes': 'Recentes'};
+  static const _statusLabels = {'guardado': 'Guardado', 'emUso': 'Em uso', 'cesto': 'No cesto'};
 
   @override
   void dispose() {
     _search.dispose();
+    _lSearch.dispose();
     super.dispose();
   }
+
+  bool get _clothesFiltered =>
+      _q.isNotEmpty || _status.isNotEmpty || _colors.isNotEmpty || _types.isNotEmpty || _tags.isNotEmpty || _pattern.isNotEmpty;
+
+  bool get _looksFiltered => _lq.isNotEmpty || _lColors.isNotEmpty || _lOcc.isNotEmpty || _lFav;
+
+  void _clearClothes() => setState(() {
+        _q = '';
+        _search.clear();
+        _status.clear();
+        _colors.clear();
+        _types.clear();
+        _tags.clear();
+        _pattern.clear();
+      });
+
+  void _clearLooks() => setState(() {
+        _lq = '';
+        _lSearch.clear();
+        _lColors.clear();
+        _lOcc.clear();
+        _lFav = false;
+      });
 
   List<Piece> _filtered() {
     final q = norm(_q);
     final list = store.live.where((p) {
       if (_status.isNotEmpty && !_status.contains(p.status)) return false;
+      if (_colors.isNotEmpty && !p.colors.any((c) => _colors.contains(c.name))) return false;
+      if (_types.isNotEmpty && !_types.contains(p.typeId)) return false;
       if (_tags.isNotEmpty && !p.tags.any(_tags.contains)) return false;
+      if (_pattern.contains('lisa') && p.patterned) return false;
+      if (_pattern.contains('estampada') && !p.patterned) return false;
       if (q.isEmpty) return true;
       final hay = norm([
         p.name,
@@ -44,7 +105,7 @@ class _WardrobePageState extends State<WardrobePage> {
         p.patterned ? 'estampada' : 'lisa',
         statusMeta(p.status).label,
       ].join(' '));
-      return hay.contains(q);
+      return q.split(' ').where((w) => w.isNotEmpty).every(hay.contains);
     }).toList();
     switch (_sort) {
       case 'mais':
@@ -56,6 +117,29 @@ class _WardrobePageState extends State<WardrobePage> {
       default:
         list.sort((a, b) => a.total.compareTo(b.total));
     }
+    return list;
+  }
+
+  List<Look> _filteredLooks() {
+    final q = norm(_lq);
+    final list = store.looks.where((l) {
+      if (_lFav && !l.fav) return false;
+      if (_lOcc.isNotEmpty && !_lOcc.contains(l.occasion)) return false;
+      final colors = store.lookColors(l);
+      if (_lColors.isNotEmpty && !colors.any((c) => _lColors.contains(c.name))) return false;
+      if (q.isEmpty) return true;
+      final hay = norm([
+        l.name,
+        l.occasion,
+        colors.map((c) => c.name).join(' '),
+        l.pieceIds().map(store.byId).whereType<Piece>().map((p) => p.name).join(' '),
+      ].join(' '));
+      return q.split(' ').where((w) => w.isNotEmpty).every(hay.contains);
+    }).toList();
+    list.sort((a, b) {
+      if (a.fav != b.fav) return a.fav ? -1 : 1;
+      return b.uses.compareTo(a.uses);
+    });
     return list;
   }
 
@@ -100,13 +184,13 @@ class _WardrobePageState extends State<WardrobePage> {
                 onPressed: () {
                   if (_seg == 'looks') {
                     tabIndex.value = 1;
-                    toast(context, 'Escolha as peças e toque em Criar look.');
+                    toast(context, 'Escolha as peças no Início.');
                   } else {
                     showPieceForm(context);
                   }
                 },
                 icon: const Icon(Icons.add_rounded),
-                label: Text(_seg == 'looks' ? 'Montar look' : 'Nova peça'),
+                label: Text(_seg == 'looks' ? 'Novo look' : 'Nova peça'),
               ),
             ),
           ],
@@ -115,10 +199,256 @@ class _WardrobePageState extends State<WardrobePage> {
     );
   }
 
+  // ============================================================ filtros
+  Widget _searchField(TextEditingController c, String hint, ValueChanged<String> onChanged) {
+    return TextField(
+      controller: c,
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search_rounded),
+        hintText: hint,
+        suffixIcon: c.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Limpar busca',
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () {
+                  c.clear();
+                  onChanged('');
+                },
+              ),
+      ),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _filterRow(List<Widget> chips, {required bool filtered, required VoidCallback onClear}) {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          if (filtered)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterButton(
+                label: 'Limpar',
+                active: false,
+                dropdown: false,
+                leading: const Icon(Icons.close_rounded, size: 18, color: C.primaryDark),
+                onTap: onClear,
+              ),
+            ),
+          for (final c in chips) Padding(padding: const EdgeInsets.only(right: 8), child: c),
+        ],
+      ),
+    );
+  }
+
+  /// Rótulo de um filtro: nome do filtro, a opção escolhida ou "Nome · 2".
+  String _label(String base, Set<String> sel, String Function(String) name) {
+    if (sel.isEmpty) return base;
+    if (sel.length == 1) return name(sel.first);
+    return '$base · ${sel.length}';
+  }
+
+  Widget? _dotFor(Set<String> sel, List<_ColorOption> options) {
+    if (sel.isEmpty) return null;
+    final colors = [
+      for (final o in options)
+        if (sel.contains(o.color.name)) o.color,
+    ];
+    return ColorDots(colors, size: 16, max: 3);
+  }
+
+  void _toggle(Set<String> s, String v) {
+    if (!s.remove(v)) s.add(v);
+  }
+
+  /// Folha com a grade de cores (como o filtro de cor da busca de imagens).
+  void _openColors(List<_ColorOption> options, Set<String> sel) {
+    showAppSheet(context, (ctx) {
+      return StatefulBuilder(builder: (ctx, setSheet) {
+        void tap(String name) {
+          setState(() => _toggle(sel, name));
+          setSheet(() {});
+        }
+
+        return SheetFrame(
+          title: 'Cor',
+          footer: Row(
+            children: [
+              TextButton(
+                onPressed: sel.isEmpty
+                    ? null
+                    : () {
+                        setState(sel.clear);
+                        setSheet(() {});
+                      },
+                child: const Text('Limpar'),
+              ),
+              const Spacer(),
+              FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ver resultados')),
+            ],
+          ),
+          child: options.isEmpty
+              ? const EmptyState(icon: Icons.palette_outlined, text: 'Nenhuma cor.')
+              : GridView.count(
+                  crossAxisCount: 4,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 0.82,
+                  children: [
+                    for (final o in options)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => tap(o.color.name),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ColorSwatchButton(
+                              color: o.color,
+                              size: 48,
+                              selected: sel.contains(o.color.name),
+                              onTap: () => tap(o.color.name),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(o.color.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text('${o.count}', style: const TextStyle(fontSize: 12, color: C.text2)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+        );
+      });
+    });
+  }
+
+  /// Folha com opções em lista (tipo, tag, status, ocasião…).
+  void _openOptions(String title, List<(String, String)> options, Set<String> sel, {bool single = false}) {
+    showAppSheet(context, (ctx) {
+      return StatefulBuilder(builder: (ctx, setSheet) {
+        return SheetFrame(
+          title: title,
+          footer: Row(
+            children: [
+              TextButton(
+                onPressed: sel.isEmpty
+                    ? null
+                    : () {
+                        setState(sel.clear);
+                        setSheet(() {});
+                      },
+                child: const Text('Limpar'),
+              ),
+              const Spacer(),
+              FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Ver resultados')),
+            ],
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final o in options)
+                Pill(
+                  label: o.$2,
+                  selected: sel.contains(o.$1),
+                  onTap: () {
+                    setState(() {
+                      if (single) {
+                        final had = sel.contains(o.$1);
+                        sel.clear();
+                        if (!had) sel.add(o.$1);
+                      } else {
+                        _toggle(sel, o.$1);
+                      }
+                    });
+                    setSheet(() {});
+                  },
+                ),
+            ],
+          ),
+        );
+      });
+    });
+  }
+
+  void _openSort() {
+    showAppSheet(context, (ctx) {
+      return SheetFrame(
+        title: 'Ordenar',
+        child: Column(
+          children: [
+            for (final e in _sortLabels.entries)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(e.value),
+                trailing: _sort == e.key ? const Icon(Icons.check_rounded, color: C.primaryDark) : null,
+                onTap: () {
+                  setState(() => _sort = e.key);
+                  Navigator.pop(ctx);
+                },
+              ),
+          ],
+        ),
+      );
+    });
+  }
+
+  // ============================================================ roupas
   List<Widget> _clothes(BuildContext context) {
     final list = _filtered();
-    final tags = store.allTags;
     final noItems = store.live.isEmpty;
+    final colorOpts = _colorOptions(store.live.map((p) => p.colors));
+    final usedTypes = {for (final p in store.live) p.typeId};
+    final typeOpts = [
+      for (final t in store.allTypes)
+        if (usedTypes.contains(t.id)) (t.id, t.name),
+    ];
+    final tagOpts = [for (final t in store.allTags) (t, '#$t')];
+
+    final chips = <Widget>[
+      FilterButton(
+        label: _label('Cor', _colors, (v) => v),
+        active: _colors.isNotEmpty,
+        leading: _dotFor(_colors, colorOpts),
+        onTap: () => _openColors(colorOpts, _colors),
+      ),
+      FilterButton(
+        label: _label('Tipo', _types, (v) => store.typeById(v).name),
+        active: _types.isNotEmpty,
+        onTap: () => _openOptions('Tipo', typeOpts, _types),
+      ),
+      if (tagOpts.isNotEmpty)
+        FilterButton(
+          label: _label('Tag', _tags, (v) => '#$v'),
+          active: _tags.isNotEmpty,
+          onTap: () => _openOptions('Tag', tagOpts, _tags),
+        ),
+      FilterButton(
+        label: _label('Status', _status, (v) => _statusLabels[v]!),
+        active: _status.isNotEmpty,
+        onTap: () => _openOptions('Status', _statusLabels.entries.map((e) => (e.key, e.value)).toList(), _status),
+      ),
+      FilterButton(
+        label: _pattern.isEmpty ? 'Estampa' : (_pattern.contains('lisa') ? 'Lisa' : 'Estampada'),
+        active: _pattern.isNotEmpty,
+        onTap: () => _openOptions('Estampa', const [('lisa', 'Lisa'), ('estampada', 'Estampada')], _pattern, single: true),
+      ),
+      FilterButton(
+        label: _sortLabels[_sort]!,
+        active: false,
+        leading: const Icon(Icons.swap_vert_rounded, size: 18, color: C.primaryDark),
+        onTap: _openSort,
+      ),
+    ];
+
     return [
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -126,75 +456,15 @@ class _WardrobePageState extends State<WardrobePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: _search,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search_rounded),
-                  hintText: 'Buscar por nome, tipo, cor ou tag',
-                ),
-                onChanged: (v) => setState(() => _q = v),
-              ),
+              _searchField(_search, 'Buscar peças', (v) => setState(() => _q = v)),
               const SizedBox(height: 12),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final s in const [('guardado', 'Guardado'), ('emUso', 'Em uso'), ('cesto', 'No cesto')])
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Pill(
-                          label: s.$2,
-                          selected: _status.contains(s.$1),
-                          onTap: () => setState(() {
-                            if (!_status.remove(s.$1)) _status.add(s.$1);
-                          }),
-                        ),
-                      ),
-                    ActionChip(
-                      avatar: const Icon(Icons.swap_vert_rounded, size: 18, color: C.primaryDark),
-                      label: Text(_sortLabels[_sort]!),
-                      onPressed: () => setState(() {
-                        _sort = {'menos': 'mais', 'mais': 'recentes', 'recentes': 'menos'}[_sort]!;
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-              if (tags.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: Text('Tags', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: C.text2)),
-                      ),
-                      for (final t in tags)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Pill(
-                            label: '#$t',
-                            selected: _tags.contains(t),
-                            onTap: () => setState(() {
-                              if (!_tags.remove(t)) _tags.add(t);
-                            }),
-                          ),
-                        ),
-                      if (_tags.isNotEmpty)
-                        TextButton(onPressed: () => setState(_tags.clear), child: const Text('Limpar')),
-                    ],
-                  ),
-                ),
-              ],
+              _filterRow(chips, filtered: _clothesFiltered, onClear: _clearClothes),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
                     child: Text(
-                      noItems
-                          ? 'Nenhuma peça cadastrada'
-                          : '${plural(list.length, 'peça', 'peças')} · ${_sortLabels[_sort]!.toLowerCase()} primeiro',
+                      noItems ? '' : plural(list.length, 'peça', 'peças'),
                       style: const TextStyle(fontSize: 14, color: C.text2),
                     ),
                   ),
@@ -219,20 +489,13 @@ class _WardrobePageState extends State<WardrobePage> {
         SliverToBoxAdapter(
           child: EmptyState(
             icon: Icons.checkroom_outlined,
-            text: noItems
-                ? 'Seu armário está pronto para ganhar as primeiras peças.'
-                : 'Nenhuma peça encontrada com esses filtros.',
+            text: noItems ? 'Nenhuma peça ainda.' : 'Nada encontrado.',
             actionLabel: noItems ? 'Adicionar peça' : 'Limpar filtros',
             onAction: () {
               if (noItems) {
                 showPieceForm(context);
               } else {
-                setState(() {
-                  _q = '';
-                  _search.clear();
-                  _status.clear();
-                  _tags.clear();
-                });
+                _clearClothes();
               }
             },
           ),
@@ -277,31 +540,82 @@ class _WardrobePageState extends State<WardrobePage> {
     );
   }
 
+  // ============================================================ looks
   List<Widget> _looks(BuildContext context) {
-    final looks = store.looks;
-    if (looks.isEmpty) {
+    if (store.looks.isEmpty) {
       return const [
-        SliverToBoxAdapter(
-          child: EmptyState(icon: Icons.style_outlined, text: 'Salve combinações para reutilizar seus looks favoritos.'),
-        ),
+        SliverToBoxAdapter(child: EmptyState(icon: Icons.style_outlined, text: 'Nenhum look salvo.')),
       ];
     }
+    final looks = _filteredLooks();
+    final colorOpts = _colorOptions(store.looks.map(store.lookColors));
+    final occOpts = [
+      for (final o in {for (final l in store.looks) l.occasion}.where((o) => o.isNotEmpty)) (o, o),
+    ];
+    final chips = <Widget>[
+      FilterButton(
+        label: _label('Cor', _lColors, (v) => v),
+        active: _lColors.isNotEmpty,
+        leading: _dotFor(_lColors, colorOpts),
+        onTap: () => _openColors(colorOpts, _lColors),
+      ),
+      if (occOpts.isNotEmpty)
+        FilterButton(
+          label: _label('Ocasião', _lOcc, (v) => v),
+          active: _lOcc.isNotEmpty,
+          onTap: () => _openOptions('Ocasião', occOpts, _lOcc),
+        ),
+      FilterButton(
+        label: 'Favoritos',
+        active: _lFav,
+        dropdown: false,
+        leading: Icon(_lFav ? Icons.star_rounded : Icons.star_outline_rounded,
+            size: 18, color: _lFav ? Colors.white : C.primaryDark),
+        onTap: () => setState(() => _lFav = !_lFav),
+      ),
+    ];
     return [
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        sliver: SliverGrid(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 0.72,
-          ),
-          delegate: SliverChildBuilderDelegate(
-            (context, i) => _LookCard(look: looks[i]),
-            childCount: looks.length,
+        sliver: SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _searchField(_lSearch, 'Buscar looks', (v) => setState(() => _lq = v)),
+              const SizedBox(height: 12),
+              _filterRow(chips, filtered: _looksFiltered, onClear: _clearLooks),
+              const SizedBox(height: 8),
+              Text(plural(looks.length, 'look', 'looks'), style: const TextStyle(fontSize: 14, color: C.text2)),
+              const SizedBox(height: 12),
+            ],
           ),
         ),
       ),
+      if (looks.isEmpty)
+        SliverToBoxAdapter(
+          child: EmptyState(
+            icon: Icons.style_outlined,
+            text: 'Nada encontrado.',
+            actionLabel: 'Limpar filtros',
+            onAction: _clearLooks,
+          ),
+        )
+      else
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.72,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) => _LookCard(look: looks[i]),
+              childCount: looks.length,
+            ),
+          ),
+        ),
     ];
   }
 }
@@ -363,7 +677,7 @@ class _LookCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final pieces = look.pieceIds().map(store.byId).whereType<Piece>().where((p) => !p.deleted).toList();
     final inBasket = pieces.where((p) => p.status == 'cesto').length;
-    final inUse = pieces.where((p) => p.status == 'emUso').length;
+    final colors = store.lookColors(look);
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -380,16 +694,7 @@ class _LookCard extends StatelessWidget {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: GridView.count(
-                      crossAxisCount: 2,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 4,
-                      crossAxisSpacing: 4,
-                      children: [
-                        for (final p in pieces.take(4))
-                          PieceArt(p, radius: 10, padding: 6, opacity: p.status == 'guardado' ? 1 : 0.38),
-                      ],
-                    ),
+                    child: LookArt(look, radius: 12),
                   ),
                 ),
                 Padding(
@@ -401,17 +706,24 @@ class _LookCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                      Text('${look.occasion} · ${plural(look.uses, 'uso', 'usos')}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: C.text2)),
-                      if (inBasket + inUse > 0)
-                        Text(
-                          inBasket > 0
-                              ? plural(inBasket, 'peça no cesto', 'peças no cesto')
-                              : plural(inUse, 'peça em uso', 'peças em uso'),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF8A5A12)),
-                        ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          if (colors.isNotEmpty) ...[ColorDots(colors, size: 12), const SizedBox(width: 6)],
+                          Expanded(
+                            child: Text(
+                              inBasket > 0 ? '$inBasket no cesto' : look.occasion,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: inBasket > 0 ? const Color(0xFF8A5A12) : C.text2,
+                                fontWeight: inBasket > 0 ? FontWeight.w600 : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -514,7 +826,7 @@ class PieceDetailSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              const SectionLabel('Depois de usar, vai para'),
+              const SectionLabel('Após o uso'),
               SegTabs<String>(
                 options: const [('cesto', 'Cesto'), ('guardado', 'Guardado')],
                 value: store.ruleOf(p),
@@ -524,7 +836,7 @@ class PieceDetailSheet extends StatelessWidget {
               const Text('Histórico', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               if (events.isEmpty)
-                const Text('Esta peça ainda não foi usada.', style: TextStyle(color: C.text2))
+                const Text('Nenhum uso ainda.', style: TextStyle(color: C.text2))
               else
                 for (final e in events.take(6))
                   Container(
@@ -599,11 +911,9 @@ class PieceDetailSheet extends StatelessWidget {
           children: [
             SizedBox(height: 80, width: 80, child: PieceArt(p, radius: 16, padding: 8)),
             const SizedBox(height: 12),
-            const Text('A peça sai do guarda-roupas e dos looks.'),
-            const SizedBox(height: 12),
             TextField(
               controller: reason,
-              decoration: const InputDecoration(labelText: 'Motivo (opcional)', hintText: 'Ex.: não serve mais, doada'),
+              decoration: const InputDecoration(labelText: 'Motivo (opcional)'),
             ),
           ],
         ),
@@ -645,6 +955,9 @@ class LookDialog extends StatelessWidget {
         if (look == null) return const SizedBox.shrink();
         final pieces = look.pieceIds().map(store.byId).whereType<Piece>().where((p) => !p.deleted).toList();
         final inBasket = pieces.where((p) => p.status == 'cesto').length;
+        final colors = store.lookColors(look);
+        final photo = look.photoPath;
+        final hasPhoto = photo != null && File(photo).existsSync();
         String sectionOf(Piece p) {
           final cat = store.catOf(p);
           if (cat == 'unica') return 'Peça única';
@@ -674,12 +987,29 @@ class LookDialog extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                            Text(
-                              '${look.occasion} · usado ${plural(look.uses, 'vez', 'vezes')} · ${plural(pieces.length, 'peça', 'peças')}',
-                              style: const TextStyle(fontSize: 14, color: C.text2),
+                            Row(
+                              children: [
+                                if (colors.isNotEmpty) ...[ColorDots(colors, size: 14, max: 5), const SizedBox(width: 8)],
+                                Flexible(
+                                  child: Text(
+                                    '${look.occasion} · ${plural(look.uses, 'uso', 'usos')}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 14, color: C.text2),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
+                      ),
+                      IconButton(
+                        tooltip: 'Editar look',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          showEditLook(host, look.id);
+                        },
+                        icon: const Icon(Icons.edit_outlined),
                       ),
                       IconButton(
                         tooltip: look.fav ? 'Remover dos favoritos' : 'Favoritar',
@@ -701,6 +1031,13 @@ class LookDialog extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (hasPhoto) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.file(File(photo!), height: 240, fit: BoxFit.cover),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         GalleryGrid(
                           pieces: pieces,
                           selectedIds: const [],
@@ -716,9 +1053,7 @@ class LookDialog extends StatelessWidget {
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(color: C.warningBg, borderRadius: BorderRadius.circular(14)),
                             child: Text(
-                              inBasket == 1
-                                  ? '1 peça está no cesto. Ao usar o look, você escolhe uma substituta no Início antes de confirmar.'
-                                  : '$inBasket peças estão no cesto. Ao usar o look, você escolhe substitutas no Início antes de confirmar.',
+                              '${plural(inBasket, 'peça', 'peças')} no cesto',
                               style: const TextStyle(color: C.warningFg, fontSize: 14),
                             ),
                           ),

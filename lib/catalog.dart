@@ -120,6 +120,8 @@ StatusMeta statusMeta(String s) {
   }
 }
 
+const List<String> kOccasions = ['Dia a dia', 'Trabalho', 'Lazer', 'Passeio', 'Festa'];
+
 // ---------- datas ----------
 const List<String> kMes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const List<String> kMesF = [

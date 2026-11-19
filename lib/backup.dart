@@ -38,8 +38,11 @@ Future<(Uint8List, BackupInfo)> buildBackup() async {
   final data = store.snapshot();
   final archive = Archive();
   final entries = <String, String>{}; // caminho no celular -> nome no zip
-  final items = (data['items'] as List).cast<Map<String, dynamic>>();
-  for (final it in items) {
+  final withPhotos = [
+    ...(data['items'] as List).cast<Map<String, dynamic>>(),
+    ...(data['looks'] as List).cast<Map<String, dynamic>>(),
+  ];
+  for (final it in withPhotos) {
     final path = it['photoPath'] as String?;
     if (path == null) continue;
     final known = entries[path];
@@ -175,10 +178,11 @@ class PendingBackup {
   }
 
   List<Map> get _items => (data['items'] as List).whereType<Map>().toList();
+  List<Map> get _looks => ((data['looks'] as List?) ?? const []).whereType<Map>().toList();
   int get pieces => _items.where((e) => e['deleted'] != true).length;
-  int get looks => (data['looks'] as List?)?.length ?? 0;
+  int get looks => _looks.length;
   int get uses => (data['log'] as List?)?.length ?? 0;
-  int get photos => _items.where((e) => e['photoPath'] != null).length;
+  int get photos => [..._items, ..._looks].where((e) => e['photoPath'] != null).length;
 
   /// Extrai as fotos para a pasta do app e substitui os dados atuais.
   Future<BackupInfo> apply() async {
@@ -187,7 +191,7 @@ class PendingBackup {
     final written = <String, String>{};
     var restored = 0;
     var i = 0;
-    for (final it in _items) {
+    for (final it in [..._items, ..._looks]) {
       final path = it['photoPath'];
       if (path is! String) continue;
       String? dest;

@@ -92,8 +92,8 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(source == ImageSource.camera
-            ? 'Não foi possível abrir a câmera. Tente escolher da galeria.'
-            : 'Não foi possível abrir a galeria.'),
+            ? 'Câmera indisponível.'
+            : 'Galeria indisponível.'),
       ));
     }
   }
@@ -127,7 +127,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
           status: _status,
           photoPath: _photo);
       Navigator.pop(context);
-      widget.messenger.showSnackBar(SnackBar(content: Text('$name foi adicionada ao guarda-roupas.')));
+      widget.messenger.showSnackBar(const SnackBar(content: Text('Peça salva.')));
     }
   }
 
@@ -177,7 +177,6 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
     final previewPiece = Piece(id: 'preview', name: '', typeId: _typeId, colors: _colors, patterned: _patterned, photoPath: _photo);
     return SheetFrame(
       title: _editing ? 'Editar peça' : 'Nova peça',
-      subtitle: 'Campos com * são obrigatórios.',
       footer: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -185,7 +184,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
           if (_photoError)
             const Padding(
               padding: EdgeInsets.only(bottom: 8),
-              child: Text('Adicione a foto principal para salvar.',
+              child: Text('Adicione uma foto.',
                   textAlign: TextAlign.center, style: TextStyle(color: C.error, fontWeight: FontWeight.w600)),
             ),
           FilledButton(onPressed: _save, child: Text(_editing ? 'Salvar alterações' : 'Salvar peça')),
@@ -195,7 +194,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ---- foto
-          SectionLabel(_editing ? 'Foto principal' : 'Foto principal *'),
+          SectionLabel(_editing ? 'Foto' : 'Foto *'),
           Container(
             height: 180,
             decoration: BoxDecoration(
@@ -234,7 +233,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
           const SizedBox(height: 24),
 
           // ---- tipo
-          const SectionLabel('Tipo de peça *'),
+          const SectionLabel('Tipo *'),
           for (final cat in kCats.keys)
             if (store.allTypes.any((t) => t.cat == cat)) ...[
               Text(kCats[cat]!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: C.text2)),
@@ -293,7 +292,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                const SectionLabel('Depois de usar, vai para'),
+                const SectionLabel('Após o uso'),
                 SegTabs<String>(
                   options: const [('cesto', 'Cesto'), ('guardado', 'Guardado')],
                   value: _ntRule,
@@ -317,13 +316,13 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
             controller: _desc,
             label: 'Descrição',
             message: 'Descreva a peça.',
-            hint: 'Ex.: Camiseta listrada de algodão',
+            hint: 'Ex.: Camiseta listrada',
             forceError: _forceDesc,
           ),
           const SizedBox(height: 24),
 
           // ---- tags
-          SectionLabel('Tags · ${_tags.isEmpty ? 'nenhuma' : _tags.map((t) => '#$t').join(' ')}'),
+          const SectionLabel('Tags'),
           if (tagPool.isNotEmpty)
             Wrap(
               spacing: 8,
@@ -347,7 +346,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
                 child: TextField(
                   controller: _newTag,
                   textInputAction: TextInputAction.done,
-                  decoration: InputDecoration(hintText: 'Criar nova tag, ex.: academia', errorText: _tagError),
+                  decoration: InputDecoration(hintText: 'Nova tag', errorText: _tagError),
                   onChanged: (_) {
                     if (_tagError != null) setState(() => _tagError = null);
                   },
@@ -364,7 +363,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
           const SizedBox(height: 24),
 
           // ---- cores
-          SectionLabel('Cores · ${_colors.isEmpty ? 'nenhuma selecionada' : joinNames(_colors.map((c) => c.name).toList())}'),
+          const SectionLabel('Cores'),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -393,8 +392,6 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          const Text('Toque em quantas cores quiser.', style: TextStyle(fontSize: 12, color: C.text2)),
           if (_ncOpen) ...[
             const SizedBox(height: 12),
             _panel(
@@ -451,10 +448,10 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
             activeColor: C.primary,
             value: _patterned,
             onChanged: (v) => setState(() => _patterned = v ?? false),
-            title: const Text('Peça estampada'),
+            title: const Text('Estampada'),
           ),
           const SizedBox(height: 8),
-          const SectionLabel('Status *'),
+          const SectionLabel('Status'),
           SegTabs<String>(
             options: const [('guardado', 'Guardado'), ('emUso', 'Em uso'), ('cesto', 'Cesto')],
             value: _status,

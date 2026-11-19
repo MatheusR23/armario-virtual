@@ -2,7 +2,9 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_drawing/path_drawing.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'catalog.dart';
 import 'models.dart';
@@ -98,6 +100,173 @@ class PieceArt extends StatelessWidget {
         decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(radius)),
         clipBehavior: Clip.antiAlias,
         child: child,
+      ),
+    );
+  }
+}
+
+/// Tira ou escolhe uma foto e salva na pasta do app. Retorna o caminho, ou
+/// `null` se a pessoa cancelar. Mostra um aviso se a câmera/galeria falhar.
+Future<String?> pickAppPhoto(BuildContext context, ImageSource source) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final x = await ImagePicker().pickImage(source: source, maxWidth: 1400, imageQuality: 85);
+    if (x == null) return null;
+    final dir = await getApplicationDocumentsDirectory();
+    final dest = '${dir.path}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await x.saveTo(dest);
+    return dest;
+  } catch (_) {
+    messenger.showSnackBar(SnackBar(
+      content: Text(source == ImageSource.camera ? 'Câmera indisponível.' : 'Galeria indisponível.'),
+    ));
+    return null;
+  }
+}
+
+/// Bolinhas de cor sobrepostas (ex.: cores de um look).
+class ColorDots extends StatelessWidget {
+  final List<ColorTag> colors;
+  final double size;
+  final int max;
+  const ColorDots(this.colors, {super.key, this.size = 14, this.max = 4});
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = colors.take(max).toList();
+    if (shown.isEmpty) return const SizedBox.shrink();
+    return Semantics(
+      label: colors.map((c) => c.name).join(', '),
+      child: SizedBox(
+        width: size + (shown.length - 1) * size * 0.65,
+        height: size,
+        child: Stack(
+          children: [
+            for (var i = 0; i < shown.length; i++)
+              Positioned(
+                left: i * size * 0.65,
+                child: Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    color: Color(shown[i].hex),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    boxShadow: const [BoxShadow(color: Color(0x401D2930), spreadRadius: 0.5)],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bolinha de cor selecionável (44px de toque).
+class ColorSwatchButton extends StatelessWidget {
+  final ColorTag color;
+  final bool selected;
+  final VoidCallback onTap;
+  final double size;
+  const ColorSwatchButton({super.key, required this.color, required this.selected, required this.onTap, this.size = 44});
+
+  @override
+  Widget build(BuildContext context) {
+    final light = Color(color.hex).computeLuminance() > 0.5;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: color.name,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: Color(color.hex),
+            shape: BoxShape.circle,
+            border: Border.all(color: selected ? C.primaryDark : Colors.white, width: selected ? 3 : 2),
+            boxShadow: const [BoxShadow(color: Color(0x331D2930), spreadRadius: 1)],
+          ),
+          child: selected ? Icon(Icons.check_rounded, size: 18, color: light ? C.text : Colors.white) : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// Foto do look, ou mosaico com até 4 peças.
+class LookArt extends StatelessWidget {
+  final Look look;
+  final double radius;
+  const LookArt(this.look, {super.key, this.radius = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    final path = look.photoPath;
+    if (path != null && File(path).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: Image.file(File(path), fit: BoxFit.cover, width: double.infinity, height: double.infinity),
+      );
+    }
+    final pieces = look.pieceIds().map(store.byId).whereType<Piece>().where((p) => !p.deleted).take(4).toList();
+    return GridView.count(
+      crossAxisCount: 2,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 4,
+      crossAxisSpacing: 4,
+      children: [
+        for (final p in pieces) PieceArt(p, radius: radius * 0.6, padding: 6, opacity: p.status == 'guardado' ? 1 : 0.38),
+      ],
+    );
+  }
+}
+
+/// Botão de filtro no estilo de busca de imagens: "Cor ▾", ativo fica escuro.
+class FilterButton extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final Widget? leading;
+  final bool dropdown;
+  const FilterButton({
+    super.key,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.leading,
+    this.dropdown = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = active ? Colors.white : C.primaryDark;
+    return Semantics(
+      button: true,
+      selected: active,
+      child: Material(
+        color: active ? C.primaryDark : Colors.white,
+        shape: StadiumBorder(side: BorderSide(color: active ? C.primaryDark : C.border)),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Container(
+            height: 40,
+            constraints: const BoxConstraints(minWidth: 44),
+            padding: EdgeInsets.only(left: leading == null ? 14 : 10, right: dropdown ? 6 : 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (leading != null) ...[leading!, const SizedBox(width: 6)],
+                Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
+                if (dropdown) Icon(Icons.arrow_drop_down_rounded, color: fg),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

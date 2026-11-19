@@ -114,6 +114,10 @@ class Look {
   List<String> acess;
   int uses;
 
+  /// Cores principais escolhidas para o look (vazio = usa as cores das peças).
+  List<ColorTag> colors;
+  String? photoPath;
+
   Look({
     required this.id,
     required this.name,
@@ -124,9 +128,12 @@ class Look {
     this.calcado,
     List<String>? acess,
     this.uses = 0,
+    List<ColorTag>? colors,
+    this.photoPath,
   })  : cima = cima ?? <String>[],
         baixo = baixo ?? <String>[],
-        acess = acess ?? <String>[];
+        acess = acess ?? <String>[],
+        colors = colors ?? <ColorTag>[];
 
   List<String> pieceIds() {
     final out = <String>[];
@@ -146,6 +153,8 @@ class Look {
         'calcado': calcado,
         'acess': acess,
         'uses': uses,
+        'colors': colors.map((c) => c.toJson()).toList(),
+        'photoPath': photoPath,
       };
 
   factory Look.fromJson(Map<String, dynamic> j) {
@@ -160,6 +169,10 @@ class Look {
       calcado: j['calcado'] as String?,
       acess: ls('acess'),
       uses: (j['uses'] as num?)?.toInt() ?? 0,
+      colors: ((j['colors'] as List?) ?? const [])
+          .map((e) => ColorTag.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      photoPath: j['photoPath'] as String?,
     );
   }
 }

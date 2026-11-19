@@ -21,8 +21,8 @@ App Android em Flutter para organizar roupas, montar looks em camadas, registrar
 | `theme.dart` | Cores (`C`) e tema Material 3 |
 | `widgets.dart` | PieceArt (foto ou desenho), SegTabs, Pill, RequiredField, SheetFrame, toast, confirmDialog |
 | `home.dart` | Início: carrosséis infinitos (cima, baixo, calçados) com camadas, galeria de acessórios, Pilha/Cesto |
-| `sheets.dart` | Abas inferiores: Pilha, Cesto, Confirmar uso, Criar look, Ver todas, GalleryGrid |
-| `wardrobe.dart` | Guarda-Roupas, detalhe da peça, pop-up do look |
+| `sheets.dart` | Abas inferiores: Pilha, Cesto, Confirmar uso, LookFormSheet (criar/editar look: foto opcional, nome, ocasião, cores principais), Ver todas, GalleryGrid |
+| `wardrobe.dart` | Guarda-Roupas com busca e filtros em botões (Cor, Tipo, Tag, Status, Estampa, Ordenar; looks: Cor, Ocasião, Favoritos), detalhe da peça, pop-up do look |
 | `piece_form.dart` | Cadastro/edição: foto, tipos (e novos tipos), várias cores (e novas), tags, estampa, status |
 | `tracking.dart` | Rastreio: períodos e intervalo personalizado, ranking, calendário por peça ou look |
 | `menu.dart` | Perfil, regras pós-uso, backup (salvar, enviar, restaurar), dados, feedback por e-mail |
@@ -37,6 +37,8 @@ Navegação: `tabIndex` (ValueNotifier) com 4 abas — Guarda-Roupas, Início (p
 - Regra pós-uso: a da peça vale mais que a do tipo; tipos de cima/baixo/peça única vão ao cesto, calçados e acessórios são guardados.
 - Peças únicas (vestido, macacão) aparecem em cima e embaixo; selecionar numa seção seleciona na outra.
 - Até 3 camadas em cima e embaixo; a camada 1 é a interna.
+- Look: `colors` (cores principais escolhidas) e `photoPath` (opcional). Sem cores escolhidas, `store.lookColors` usa as cores das peças (filtro e bolinhas).
+- Textos curtos: sem subtítulos explicativos; rótulos de 1–3 palavras.
 
 ## Decisões e diferenças em relação ao prompt original
 
