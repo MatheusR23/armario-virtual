@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'backup.dart';
 import 'catalog.dart';
 import 'store.dart';
 import 'theme.dart';
@@ -16,6 +16,7 @@ class MenuPage extends StatefulWidget {
 class _MenuPageState extends State<MenuPage> {
   late final TextEditingController _name = TextEditingController(text: store.profileName);
   final _feedback = TextEditingController();
+  String? _busy;
 
   @override
   void dispose() {
@@ -111,21 +112,36 @@ class _MenuPageState extends State<MenuPage> {
                       style: const TextStyle(fontSize: 14, color: C.text2),
                     ),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.copy_all_outlined, color: C.primaryDark),
-                    title: const Text('Copiar backup (JSON)', style: TextStyle(fontWeight: FontWeight.w600)),
-                    onTap: () async {
-                      await Clipboard.setData(ClipboardData(text: store.exportJson()));
-                      if (context.mounted) toast(context, 'Backup copiado. Cole num e-mail ou nota para guardar.');
+                  _action(
+                    id: 'save',
+                    icon: Icons.save_alt_rounded,
+                    title: 'Salvar backup no celular',
+                    subtitle: 'Arquivo .zip com dados e fotos',
+                    run: () async {
+                      final ok = await saveBackupToFile();
+                      if (ok && mounted) toast(this.context, 'Backup salvo.');
                     },
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.table_chart_outlined, color: C.primaryDark),
-                    title: const Text('Copiar relatório (CSV)', style: TextStyle(fontWeight: FontWeight.w600)),
-                    onTap: () async {
-                      await Clipboard.setData(ClipboardData(text: store.exportCsv()));
-                      if (context.mounted) toast(context, 'Relatório copiado.');
-                    },
+                  _action(
+                    id: 'share',
+                    icon: Icons.ios_share_rounded,
+                    title: 'Enviar backup',
+                    subtitle: 'Por e-mail, WhatsApp, Drive…',
+                    run: shareBackup,
+                  ),
+                  _action(
+                    id: 'restore',
+                    icon: Icons.settings_backup_restore_rounded,
+                    title: 'Restaurar backup',
+                    subtitle: 'Substitui os dados deste celular',
+                    run: _restore,
+                  ),
+                  _action(
+                    id: 'csv',
+                    icon: Icons.table_chart_outlined,
+                    title: 'Enviar relatório (CSV)',
+                    subtitle: 'Planilha com as peças e usos',
+                    run: shareCsv,
                   ),
                   ListTile(
                     leading: const Icon(Icons.refresh_rounded, color: C.primaryDark),
@@ -152,7 +168,7 @@ class _MenuPageState extends State<MenuPage> {
                       final ok = await confirmDialog(
                         context,
                         title: 'Apagar todos os dados?',
-                        text: 'Peças, fotos, looks e histórico serão removidos deste celular. Essa ação não pode ser desfeita. Copie um backup antes, se quiser.',
+                        text: 'Peças, fotos, looks e histórico serão removidos deste celular. Essa ação não pode ser desfeita. Salve um backup antes, se quiser.',
                         confirmLabel: 'Apagar tudo',
                         danger: true,
                       );
@@ -194,6 +210,58 @@ class _MenuPageState extends State<MenuPage> {
         );
       },
     );
+  }
+
+  /// Item de backup com estado de carregamento; só uma ação roda por vez.
+  Widget _action({
+    required String id,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Future<void> Function() run,
+  }) {
+    final busy = _busy == id;
+    return ListTile(
+      enabled: _busy == null,
+      leading: busy
+          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
+          : Icon(icon, color: C.primaryDark),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle),
+      onTap: () async {
+        setState(() => _busy = id);
+        try {
+          await run();
+        } on BackupError catch (e) {
+          if (mounted) toast(context, e.message);
+        } catch (e) {
+          debugPrint('Erro no backup: $e');
+          if (mounted) toast(context, 'Não foi possível concluir. Tente de novo.');
+        } finally {
+          if (mounted) setState(() => _busy = null);
+        }
+      },
+    );
+  }
+
+  Future<void> _restore() async {
+    final pending = await pickBackup();
+    if (pending == null || !mounted) return;
+    final ok = await confirmDialog(
+      context,
+      title: 'Restaurar este backup?',
+      text: 'O backup tem ${plural(pending.pieces, 'peça', 'peças')}, ${plural(pending.looks, 'look', 'looks')}, '
+          '${plural(pending.uses, 'uso registrado', 'usos registrados')} e ${plural(pending.photos, 'foto', 'fotos')}. '
+          'Os dados atuais deste celular serão substituídos. Essa ação não pode ser desfeita.',
+      confirmLabel: 'Restaurar',
+      danger: true,
+    );
+    if (!ok) return;
+    final info = await pending.apply();
+    _name.text = store.profileName;
+    if (mounted) {
+      toast(context, 'Backup restaurado: ${plural(info.pieces, 'peça', 'peças')} e ${plural(info.photos, 'foto', 'fotos')}.');
+    }
   }
 
   Widget _header(String text) => Padding(

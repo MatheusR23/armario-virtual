@@ -25,7 +25,8 @@ App Android em Flutter para organizar roupas, montar looks em camadas, registrar
 | `wardrobe.dart` | Guarda-Roupas, detalhe da peça, pop-up do look |
 | `piece_form.dart` | Cadastro/edição: foto, tipos (e novos tipos), várias cores (e novas), tags, estampa, status |
 | `tracking.dart` | Rastreio: períodos e intervalo personalizado, ranking, calendário por peça ou look |
-| `menu.dart` | Perfil, regras pós-uso, backup (área de transferência), dados, feedback por e-mail |
+| `menu.dart` | Perfil, regras pós-uso, backup (salvar, enviar, restaurar), dados, feedback por e-mail |
+| `backup.dart` | Monta/lê o `.zip` de backup, salvar em arquivo, compartilhar, restaurar, CSV |
 
 Navegação: `tabIndex` (ValueNotifier) com 4 abas — Guarda-Roupas, Início (padrão), Rastreio, Menu. Barra inferior escura, só ícones.
 
@@ -41,7 +42,7 @@ Navegação: `tabIndex` (ValueNotifier) com 4 abas — Guarda-Roupas, Início (p
 
 - Persistência em arquivo JSON + `ChangeNotifier` em vez de Drift/SQLite + Riverpod + GoRouter (sem geração de código). Migrar é possível sem mudar as telas.
 - Clima ainda não implementado.
-- Backup/CSV são copiados para a área de transferência.
+- Backup (`backup.dart`): `.zip` com `armario_virtual.json` + `fotos/`; salvar via `file_picker` (SAF), enviar via `share_plus`, restaurar via `file_picker` (aceita também o JSON antigo da área de transferência). CSV é enviado como arquivo com BOM.
 
 ## Diretrizes de interface (resumo)
 

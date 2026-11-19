@@ -189,6 +189,25 @@ class Store extends ChangeNotifier {
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_toJson());
 
+  /// Cópia dos dados no formato salvo (usada pelo backup).
+  Map<String, dynamic> snapshot() => _toJson();
+
+  /// Substitui todos os dados pelos de um backup. Se o backup estiver com
+  /// problema, mantém os dados atuais e repassa o erro.
+  void restore(Map<String, dynamic> j) {
+    final before = _toJson();
+    try {
+      _fromJson(j);
+    } catch (_) {
+      _fromJson(before);
+      rethrow;
+    }
+    undo = null;
+    sel = Selection();
+    focus.clear();
+    commit();
+  }
+
   String exportCsv() {
     String q(String s) => '"${s.replaceAll('"', '""')}"';
     final b = StringBuffer('peca;tipo;cores;tags;status;usos_total;usos_desde_lavagem;ultimo_uso;ultima_lavagem\n');
