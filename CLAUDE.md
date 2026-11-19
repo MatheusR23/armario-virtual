@@ -8,7 +8,8 @@ App Android em Flutter para organizar roupas, montar looks em camadas, registrar
 - Cada push na `main` publica uma versão em **Releases** (`v1.0.<run>`) com `armario-virtual.apk`.
 - Se a compilação falhar, o log vai para a branch `ci-logs` (`ci/last-build.log`, `ci/analyze.log`).
 - Para rodar localmente: `flutter create . --platforms=android --project-name armario_virtual`, `python .github/scripts/patch_android.py`, `flutter run`.
-- Pendente: assinatura fixa. Hoje o APK sai com chave de debug gerada a cada build, então atualizar exige desinstalar (e perder os dados).
+- Assinatura fixa: o workflow decodifica o secret `ANDROID_KEYSTORE_BASE64` em `android/app/release.jks` e o `patch_android.py` configura o `signingConfig` de release com `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` e `ANDROID_KEY_PASSWORD`. Sem o secret, o build do CI falha de propósito (para não publicar APK com chave de debug). A chave nunca vai para o repositório (`*.jks` no `.gitignore`).
+- `versionCode` = número da execução do workflow e `versionName` = `1.0.<run>`, então cada APK novo instala por cima do anterior.
 
 ## Estrutura (`lib/`)
 

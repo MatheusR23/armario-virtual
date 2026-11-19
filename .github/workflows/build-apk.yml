@@ -29,15 +29,27 @@ jobs:
           cache: true
 
       - name: Gerar projeto Android e compilar
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -o pipefail
           {
+            set -e
+            if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+              echo "::error::Secret ANDROID_KEYSTORE_BASE64 não configurado; sem ele o APK sairia com chave de debug."
+              exit 1
+            fi
             flutter --version
             flutter create . --platforms=android --org com.armariovirtual --project-name armario_virtual
             rm -f test/widget_test.dart
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.jks
             python3 .github/scripts/patch_android.py
             flutter pub get
-            flutter build apk --release
+            flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
+            rm -f android/app/release.jks
             cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/armario-virtual.apk
           } 2>&1 | tee build.log
 
