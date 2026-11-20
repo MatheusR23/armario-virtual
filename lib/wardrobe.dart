@@ -160,7 +160,15 @@ class _WardrobePageState extends State<WardrobePage> {
       builder: (context, _) {
         return Stack(
           children: [
-            CustomScrollView(
+            // Pinça na grade de roupas: afastar os dedos = menos colunas
+            // (peças maiores), aproximar = mais colunas.
+            Listener(
+              onPointerDown: _pDown,
+              onPointerMove: _pMove,
+              onPointerUp: _pEnd,
+              onPointerCancel: _pEnd,
+              child: CustomScrollView(
+              physics: _pointers.length >= 2 ? const NeverScrollableScrollPhysics() : null,
               slivers: [
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 20, 8, 0),
@@ -190,6 +198,7 @@ class _WardrobePageState extends State<WardrobePage> {
                 if (_looksSeg) ..._looks(context) else ..._clothes(context),
                 const SliverToBoxAdapter(child: SizedBox(height: 104)),
               ],
+              ),
             ),
             Positioned(
               right: 16,
@@ -197,7 +206,7 @@ class _WardrobePageState extends State<WardrobePage> {
               child: FloatingActionButton.extended(
                 heroTag: 'fab-guarda',
                 backgroundColor: C.primary,
-                foregroundColor: Colors.white,
+                foregroundColor: C.onPrimary,
                 onPressed: () {
                   if (_looksSeg) {
                     tabIndex.value = 1;
@@ -214,6 +223,45 @@ class _WardrobePageState extends State<WardrobePage> {
         );
       },
     );
+  }
+
+  // ============================================================ pinça
+  final Map<int, Offset> _pointers = {};
+  double? _pinchBase;
+
+  double _pinchDist() {
+    final v = _pointers.values.toList();
+    return (v[0] - v[1]).distance;
+  }
+
+  void _pDown(PointerDownEvent e) {
+    _pointers[e.pointer] = e.position;
+    if (_pointers.length == 2) {
+      _pinchBase = _pinchDist();
+      setState(() {}); // trava a rolagem durante a pinça
+    }
+  }
+
+  void _pMove(PointerMoveEvent e) {
+    if (!_pointers.containsKey(e.pointer)) return;
+    _pointers[e.pointer] = e.position;
+    final base = _pinchBase;
+    if (_pointers.length != 2 || base == null || base < 1 || _looksSeg) return;
+    final ratio = _pinchDist() / base;
+    if (ratio > 1.25 && store.cols > kMinCols) {
+      store.setCols(store.cols - 1);
+      _pinchBase = _pinchDist();
+    } else if (ratio < 0.8 && store.cols < kMaxCols) {
+      store.setCols(store.cols + 1);
+      _pinchBase = _pinchDist();
+    }
+  }
+
+  void _pEnd(PointerEvent e) {
+    final had = _pointers.length;
+    _pointers.remove(e.pointer);
+    if (_pointers.length < 2) _pinchBase = null;
+    if (had >= 2 && _pointers.length < 2) setState(() {});
   }
 
   // ============================================================ cabeçalho
@@ -250,7 +298,8 @@ class _WardrobePageState extends State<WardrobePage> {
           style: IconButton.styleFrom(backgroundColor: _filtersOpen ? C.primaryLight : null),
           icon: Badge(
             isLabelVisible: n > 0,
-            backgroundColor: C.primaryDark,
+            backgroundColor: C.accent,
+            textColor: C.onAccent,
             label: Text('$n'),
             child: const Icon(Icons.tune_rounded),
           ),
@@ -463,13 +512,7 @@ class _WardrobePageState extends State<WardrobePage> {
               ),
             ...cats,
           ]),
-          if (options != null)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: C.line)),
-              child: options,
-            ),
+          if (options != null) Padding(padding: const EdgeInsets.only(top: 4), child: options),
         ],
       ),
     );
@@ -483,22 +526,13 @@ class _WardrobePageState extends State<WardrobePage> {
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: SliverToBoxAdapter(
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  noItems ? '' : plural(list.length, 'peça', 'peças'),
-                  style: const TextStyle(fontSize: 14, color: C.text2),
-                ),
-              ),
-              _colBtn(2, Icons.grid_view_rounded, '2 colunas'),
-              const SizedBox(width: 8),
-              _colBtn(3, Icons.apps_rounded, '3 colunas'),
-            ],
+          child: Text(
+            noItems ? '' : plural(list.length, 'peça', 'peças'),
+            style: const TextStyle(fontSize: 14, color: C.text2),
           ),
         ),
       ),
-      const SliverToBoxAdapter(child: SizedBox(height: 4)),
+      const SliverToBoxAdapter(child: SizedBox(height: 12)),
       if (list.isEmpty)
         SliverToBoxAdapter(
           child: EmptyState(
@@ -520,25 +554,17 @@ class _WardrobePageState extends State<WardrobePage> {
           sliver: SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: store.cols,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: store.cols == 2 ? 0.74 : 0.66,
+              mainAxisSpacing: store.cols >= 4 ? 8 : 12,
+              crossAxisSpacing: store.cols >= 4 ? 8 : 12,
+              childAspectRatio: const {2: 0.74, 3: 0.66, 4: 0.6}[store.cols] ?? 0.66,
             ),
             delegate: SliverChildBuilderDelegate(
-              (context, i) => _PieceCard(piece: list[i]),
+              (context, i) => _PieceCard(piece: list[i], compact: store.cols >= 4),
               childCount: list.length,
             ),
           ),
         ),
     ];
-  }
-
-  /// Escolha de colunas no mesmo estilo de chip (só ícone).
-  Widget _colBtn(int n, IconData icon, String label) {
-    return Tooltip(
-      message: label,
-      child: YtChip(label: '', leading: Icon(icon), selected: store.cols == n, onTap: () => store.setCols(n)),
-    );
   }
 
   // ============================================================ looks
@@ -587,13 +613,39 @@ class _WardrobePageState extends State<WardrobePage> {
 
 class _PieceCard extends StatelessWidget {
   final Piece piece;
-  const _PieceCard({required this.piece});
+  final bool compact; // 4 colunas: só o nome, em letra menor
+  const _PieceCard({required this.piece, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     final p = piece;
+    if (compact) {
+      return Material(
+        color: C.surface,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        elevation: 1,
+        shadowColor: const Color(0x331D2930),
+        child: InkWell(
+          onTap: () => showPieceDetail(context, p.id),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: PieceArt(p, radius: 0, padding: 8)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
+                child: Text(p.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Material(
-      color: Colors.white,
+      color: C.surface,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       elevation: 1,
@@ -644,7 +696,7 @@ class _LookCard extends StatelessWidget {
     final inBasket = pieces.where((p) => p.status == 'cesto').length;
     final colors = store.lookColors(look);
     return Material(
-      color: Colors.white,
+      color: C.surface,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       elevation: 1,
@@ -682,7 +734,7 @@ class _LookCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: inBasket > 0 ? const Color(0xFF8A5A12) : C.text2,
+                                color: inBasket > 0 ? C.warnText : C.text2,
                                 fontWeight: inBasket > 0 ? FontWeight.w600 : FontWeight.w400,
                               ),
                             ),
@@ -704,7 +756,7 @@ class _LookCard extends StatelessWidget {
                   look.fav ? Icons.star_rounded : Icons.star_outline_rounded,
                   color: look.fav ? const Color(0xFFB07A1E) : C.text2,
                 ),
-                style: IconButton.styleFrom(backgroundColor: const Color(0xF0FFFFFF)),
+                style: IconButton.styleFrom(backgroundColor: C.surface),
               ),
             ),
           ],
@@ -806,7 +858,7 @@ class PieceDetailSheet extends StatelessWidget {
                 for (final e in events.take(6))
                   Container(
                     height: 40,
-                    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFEEF2F4)))),
+                    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: C.divider))),
                     child: Row(
                       children: [
                         Container(width: 8, height: 8, decoration: BoxDecoration(color: e.$3, shape: BoxShape.circle)),
@@ -831,7 +883,7 @@ class PieceDetailSheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   TextButton.icon(
-                    style: TextButton.styleFrom(foregroundColor: const Color(0xFFA23E3C)),
+                    style: TextButton.styleFrom(foregroundColor: C.danger),
                     onPressed: () => _askDelete(context, p),
                     icon: const Icon(Icons.delete_outline_rounded),
                     label: const Text('Excluir'),
@@ -847,13 +899,13 @@ class PieceDetailSheet extends StatelessWidget {
 
   Widget _chip(Widget child) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: const Color(0xFFF1F4F6), borderRadius: BorderRadius.circular(999)),
+        decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(999)),
         child: DefaultTextStyle.merge(style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), child: child),
       );
 
   Widget _stat(String label, String value) => Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: const Color(0xFFF3F6F8), borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(14)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1029,12 +1081,12 @@ class LookDialog extends StatelessWidget {
                 ),
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFEEF2F4)))),
+                  decoration: const BoxDecoration(border: Border(top: BorderSide(color: C.divider))),
                   child: Row(
                     children: [
                       IconButton(
                         tooltip: 'Excluir look',
-                        color: const Color(0xFFA23E3C),
+                        color: C.danger,
                         onPressed: () async {
                           final ok = await confirmDialog(
                             context,

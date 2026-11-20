@@ -195,7 +195,7 @@ class _TrackingPageState extends State<TrackingPage> {
                 return SizedBox(
                   width: 240,
                   child: Material(
-                    color: Colors.white,
+                    color: C.surface,
                     borderRadius: BorderRadius.circular(16),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
@@ -270,7 +270,7 @@ class _TrackingPageState extends State<TrackingPage> {
                   Text(plural(byCat[c]!, 'uso', 'usos'), style: const TextStyle(fontSize: 14, color: C.text2)),
                 ]),
                 const SizedBox(height: 4),
-                _bar(byCat[c]! / maxCat, const Color(0xFF8BA5B3)),
+                _bar(byCat[c]! / maxCat, const AppColor(0xFF8BA5B3, 0xFF6F8D9E)),
                 const SizedBox(height: 12),
               ],
             ],
@@ -353,7 +353,7 @@ class _TrackingPageState extends State<TrackingPage> {
         borderRadius: BorderRadius.circular(999),
         child: Container(
           height: 10,
-          color: const Color(0xFFEEF2F4),
+          color: C.divider,
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
             widthFactor: frac <= 0 ? 0 : math.max(0.03, math.min(1.0, frac)),
@@ -530,7 +530,7 @@ class _TrackingPageState extends State<TrackingPage> {
             Row(children: [
               _legend(C.primary, 'Usado'),
               const SizedBox(width: 16),
-              _legend(const Color(0xFFEEF2F4), 'Sem uso'),
+              _legend(C.divider, 'Sem uso'),
             ]),
             if (cd != null) ...[
               const Divider(height: 24),
@@ -566,7 +566,7 @@ class _TrackingPageState extends State<TrackingPage> {
         onTap: future ? null : () => setState(() => _calDay = sel ? null : dn),
         child: Container(
           decoration: BoxDecoration(
-            color: future ? Colors.transparent : (isUsed ? C.primary : const Color(0xFFEEF2F4)),
+            color: future ? Colors.transparent : (isUsed ? C.primary : C.divider),
             borderRadius: BorderRadius.circular(10),
             border: sel ? Border.all(color: C.text, width: 2) : null,
           ),
@@ -576,7 +576,7 @@ class _TrackingPageState extends State<TrackingPage> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: future ? const Color(0xFF9AA5AB) : (isUsed ? Colors.white : C.text),
+              color: future ? C.disabled : (isUsed ? C.onPrimary : C.text),
             ),
           ),
         ),
@@ -646,7 +646,7 @@ class _TrackingPageState extends State<TrackingPage> {
                           crossAxisSpacing: 3,
                           children: [
                             for (final p in l.pieceIds().map(store.byId).whereType<Piece>().take(4))
-                              PieceArt(p, radius: 8, padding: 4, background: Colors.white),
+                              PieceArt(p, radius: 8, padding: 4, background: C.surface),
                           ],
                         ),
                       ),

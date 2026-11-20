@@ -13,6 +13,13 @@ final Store store = Store();
 /// Aba ativa da navegação inferior (0 Guarda-Roupas, 1 Início, 2 Rastreio, 3 Menu).
 final ValueNotifier<int> tabIndex = ValueNotifier<int>(1);
 
+/// Tema escolhido: sistema | claro | escuro.
+final ValueNotifier<String> themeMode = ValueNotifier<String>('sistema');
+
+/// Colunas da grade do Guarda-Roupas (ajustável com pinça).
+const int kMinCols = 2;
+const int kMaxCols = 4;
+
 class Selection {
   List<String?> cima = [null];
   List<String?> baixo = [null];
@@ -51,7 +58,7 @@ class Store extends ChangeNotifier {
   List<ColorTag> customColors = [];
   List<String> extraTags = [];
   Map<String, String> rules = {};
-  String profileName = 'Alex';
+  String profileName = '';
   int cols = 2;
 
   Selection sel = Selection();
@@ -123,12 +130,12 @@ class Store extends ChangeNotifier {
       if (await f.exists()) {
         _fromJson(Map<String, dynamic>.from(jsonDecode(await f.readAsString()) as Map));
       } else {
-        seed();
+        // Primeira vez: armário vazio, abrindo no Guarda-Roupas.
+        tabIndex.value = 0;
         await _save();
       }
     } catch (e) {
       debugPrint('Erro ao carregar dados: $e');
-      if (items.isEmpty) seed();
     }
     loaded = true;
     notifyListeners();
@@ -163,6 +170,7 @@ class Store extends ChangeNotifier {
         'rules': rules,
         'profileName': profileName,
         'cols': cols,
+        'theme': themeMode.value,
       };
 
   void _fromJson(Map<String, dynamic> j) {
@@ -184,7 +192,9 @@ class Store extends ChangeNotifier {
       r.forEach((k, v) => rules[k.toString()] = v.toString());
     }
     profileName = (j['profileName'] as String?) ?? '';
-    cols = (j['cols'] as num?)?.toInt() ?? 2;
+    cols = ((j['cols'] as num?)?.toInt() ?? 2).clamp(kMinCols, kMaxCols);
+    final th = j['theme'];
+    if (th is String && const ['sistema', 'claro', 'escuro'].contains(th)) themeMode.value = th;
   }
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_toJson());
@@ -225,112 +235,6 @@ class Store extends ChangeNotifier {
       ].join(';'));
     }
     return b.toString();
-  }
-
-  // ---------------------------------------------------------------- dados de exemplo
-  void seed() {
-    final t = todayDay();
-    // id, nome, tipo, cores, status, usos, desde lavagem, último uso (dias), lavagens, tags, estampada, forma
-    final raw = <List<Object?>>[
-      ['p1', 'Camiseta azul-marinho', 'camiseta', [const ColorTag('Azul', 0xFF26406A)], 'guardado', 3, 1, -6, 1, ['básico'], false, null],
-      ['p2', 'Camisa branca de linho', 'camisa', [const ColorTag('Branco', 0xFFF5F3EE)], 'guardado', 1, 0, -41, 1, ['trabalho'], false, null],
-      ['p3', 'Jaqueta jeans', 'jaqueta', [const ColorTag('Azul', 0xFF5D80A8)], 'guardado', 5, 3, -9, 1, ['meia-estação'], false, null],
-      ['p4', 'Calça preta reta', 'calca', [const ColorTag('Preto', 0xFF25292D)], 'emUso', 8, 2, -1, 3, ['trabalho'], false, null],
-      ['p5', 'Bermuda bege', 'bermuda', [const ColorTag('Bege', 0xFFD9C4A0)], 'guardado', 2, 1, -23, 1, ['verão'], false, null],
-      ['p6', 'Vestido floral', 'vestido', [const ColorTag('Rosa', 0xFFE8A6B6), const ColorTag('Verde', 0xFF4F7A5A)], 'guardado', 1, 0, -58, 1, ['verão'], true, null],
-      ['p7', 'Tênis branco', 'tenis', [const ColorTag('Branco', 0xFFF4F4F2)], 'emUso', 12, 4, -1, 2, ['básico'], false, null],
-      ['p8', 'Relógio prata', 'relogio', [const ColorTag('Prata', 0xFFB9C0C6)], 'guardado', 18, 5, -1, 0, <String>[], false, null],
-      ['p9', 'Bolsa marrom', 'bolsa', [const ColorTag('Marrom', 0xFF7B5336)], 'guardado', 6, 2, -12, 1, ['couro'], false, null],
-      ['p10', 'Moletom cinza', 'moletom', [const ColorTag('Cinza', 0xFF9AA3A8)], 'cesto', 9, 3, -4, 2, ['inverno'], false, null],
-      ['p11', 'Sandália caramelo', 'sandalia', [const ColorTag('Caramelo', 0xFFB9773F)], 'guardado', 2, 2, -30, 0, ['verão'], false, null],
-    ];
-    items = [];
-    log = [];
-    washes = [];
-    lookLog = [];
-    removals = [];
-    customTypes = [];
-    customColors = [];
-    extraTags = [];
-    rules = {};
-    undo = null;
-    sel = Selection();
-    focus.clear();
-    profileName = 'Alex';
-    cols = 2;
-
-    var ix = 0;
-    for (final a in raw) {
-      final n = a[5] as int;
-      final since = a[6] as int;
-      final last = a[7] as int;
-      final w = a[8] as int;
-      final p = Piece(
-        id: a[0] as String,
-        name: a[1] as String,
-        typeId: a[2] as String,
-        colors: List<ColorTag>.from(a[3] as List),
-        status: a[4] as String,
-        total: n,
-        since: since,
-        tags: List<String>.from(a[9] as List),
-        patterned: a[10] as bool,
-        shape: a[11] as String?,
-      );
-      var r = ((ix + 3) * 7919) % 233280;
-      ix++;
-      double rnd() {
-        r = (r * 9301 + 49297) % 233280;
-        return r / 233280;
-      }
-
-      final days = <int>[];
-      var d = t + last;
-      final double avg = n > 1 ? (300 + last) / n : 0.0;
-      for (var k = 0; k < n; k++) {
-        days.add(d);
-        d -= math.max(1, (avg * (0.55 + 0.9 * rnd())).round());
-      }
-      for (final x in days) {
-        log.add(UseLog(p.id, x));
-      }
-      p.lastUse = n > 0 ? days.first : null;
-      final u = n - since;
-      if (w > 0 && u > 0) {
-        final per = u / w;
-        var used = 0;
-        for (var j = 0; j < w; j++) {
-          final idx = math.min(n - 1, since + (per * j).round());
-          final uses = j < w - 1 ? math.max(1, per.round()) : math.max(1, u - used);
-          used += per.round();
-          final wd = math.min(t, days[idx] + 1);
-          washes.add(Wash(p.id, wd, uses));
-          if (j == 0) p.lastWash = wd;
-        }
-      }
-      items.add(p);
-    }
-
-    looks = [
-      Look(id: 'l1', name: 'Casual urbano', occasion: 'Dia a dia', fav: true, cima: ['p1'], baixo: ['p4'], calcado: 'p7', acess: ['p8'], uses: 4),
-      Look(id: 'l2', name: 'Trabalho leve', occasion: 'Trabalho', cima: ['p2'], baixo: ['p4'], calcado: 'p7', uses: 2),
-      Look(id: 'l3', name: 'Fim de semana', occasion: 'Lazer', cima: ['p10'], baixo: ['p5'], calcado: 'p7', uses: 1),
-      Look(id: 'l4', name: 'Dia quente', occasion: 'Passeio', fav: true, cima: ['p6'], baixo: ['p6'], calcado: 'p11', acess: ['p9'], uses: 0),
-    ];
-    for (final lk in looks) {
-      final base = lk.cima.isNotEmpty ? lk.cima.first : (lk.baixo.isNotEmpty ? lk.baixo.first : null);
-      if (base == null) continue;
-      final ds = log.where((l) => l.itemId == base).map((l) => l.day).toList();
-      ds.sort((a, b) => b.compareTo(a));
-      for (final day in ds.take(lk.uses)) {
-        lookLog.add(LookLog(lk.id, day));
-      }
-    }
-  }
-
-  void reseed() {
-    seed();
-    commit();
   }
 
   void wipe() {
@@ -827,7 +731,14 @@ class Store extends ChangeNotifier {
   }
 
   void setCols(int c) {
-    cols = c;
+    final v = c.clamp(kMinCols, kMaxCols);
+    if (v == cols) return;
+    cols = v;
     commit();
+  }
+
+  void setTheme(String v) {
+    themeMode.value = v;
+    _save();
   }
 }

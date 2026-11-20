@@ -47,7 +47,7 @@ class _MenuPageState extends State<MenuPage> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
           children: [
-            const Text('Menu', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+            const Text('Configurações', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
             const SizedBox(height: 24),
             Card2(
               child: Row(
@@ -55,7 +55,7 @@ class _MenuPageState extends State<MenuPage> {
                   CircleAvatar(
                     radius: 28,
                     backgroundColor: C.primary,
-                    child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700)),
+                    child: Text(initial, style: const TextStyle(color: C.onPrimary, fontSize: 24, fontWeight: FontWeight.w700)),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -80,16 +80,27 @@ class _MenuPageState extends State<MenuPage> {
               ),
             ),
             _header('Aparência e idioma'),
-            const Card2(
+            Card2(
               padding: EdgeInsets.zero,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ListTile(
-                    leading: Icon(Icons.palette_outlined, color: C.primaryDark),
+                  const ListTile(
+                    leading: Icon(Icons.dark_mode_outlined, color: C.primaryDark),
                     title: Text('Tema'),
-                    trailing: Text('Azul-acinzentado', style: TextStyle(color: C.text2)),
                   ),
-                  ListTile(
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: themeMode,
+                      builder: (context, mode, _) => SegTabs<String>(
+                        options: const [('sistema', 'Sistema'), ('claro', 'Claro'), ('escuro', 'Escuro')],
+                        value: mode,
+                        onChanged: store.setTheme,
+                      ),
+                    ),
+                  ),
+                  const ListTile(
                     leading: Icon(Icons.language_rounded, color: C.primaryDark),
                     title: Text('Idioma'),
                     trailing: Text('Português (Brasil)', style: TextStyle(color: C.text2)),
@@ -143,26 +154,9 @@ class _MenuPageState extends State<MenuPage> {
                     run: shareCsv,
                   ),
                   ListTile(
-                    leading: const Icon(Icons.refresh_rounded, color: C.primaryDark),
-                    title: const Text('Dados de exemplo', style: TextStyle(fontWeight: FontWeight.w600)),
-                    onTap: () async {
-                      final ok = await confirmDialog(
-                        context,
-                        title: 'Usar dados de exemplo?',
-                        text: 'Seus dados serão substituídos.',
-                        confirmLabel: 'Substituir',
-                        danger: true,
-                      );
-                      if (ok) {
-                        store.reseed();
-                        _name.text = store.profileName;
-                      }
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFA23E3C)),
+                    leading: const Icon(Icons.delete_outline_rounded, color: C.danger),
                     title: const Text('Apagar todos os dados',
-                        style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFA23E3C))),
+                        style: TextStyle(fontWeight: FontWeight.w600, color: C.danger)),
                     onTap: () async {
                       final ok = await confirmDialog(
                         context,
@@ -199,10 +193,6 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            const Center(
-              child: Text('Armário Virtual', style: TextStyle(fontSize: 12, color: C.text2)),
             ),
           ],
         );

@@ -14,15 +14,55 @@ void main() {
   runApp(const ArmarioApp());
 }
 
-class ArmarioApp extends StatelessWidget {
+class ArmarioApp extends StatefulWidget {
   const ArmarioApp({super.key});
 
   @override
+  State<ArmarioApp> createState() => _ArmarioAppState();
+}
+
+class _ArmarioAppState extends State<ArmarioApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    themeMode.addListener(_onTheme);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    themeMode.removeListener(_onTheme);
+    super.dispose();
+  }
+
+  void _onTheme() => setState(() {});
+
+  @override
+  void didChangePlatformBrightness() => setState(() {});
+
+  bool get _dark {
+    switch (themeMode.value) {
+      case 'escuro':
+        return true;
+      case 'claro':
+        return false;
+      default:
+        return WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dark = _dark;
+    appDark = dark;
+    // A chave força remontar tudo ao trocar o tema, para as cores AppColor
+    // (inclusive em widgets const) serem lidas de novo.
     return MaterialApp(
+      key: ValueKey(dark),
       title: 'Armário Virtual',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
+      theme: buildTheme(dark),
       locale: const Locale('pt', 'BR'),
       supportedLocales: const [Locale('pt', 'BR')],
       localizationsDelegates: const [
@@ -42,7 +82,7 @@ class Shell extends StatelessWidget {
     (Icons.checkroom_outlined, Icons.checkroom, 'Guarda-Roupas'),
     (Icons.home_outlined, Icons.home_rounded, 'Início'),
     (Icons.bar_chart_rounded, Icons.bar_chart_rounded, 'Rastreio'),
-    (Icons.menu_rounded, Icons.menu_rounded, 'Menu'),
+    (Icons.settings_outlined, Icons.settings_rounded, 'Configurações'),
   ];
 
   @override
@@ -66,7 +106,7 @@ class Shell extends StatelessWidget {
               ),
               bottomNavigationBar: NavigationBar(
                 height: 72,
-                backgroundColor: C.primaryDark,
+                backgroundColor: C.navBar,
                 indicatorColor: C.navActive,
                 indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
@@ -76,7 +116,7 @@ class Shell extends StatelessWidget {
                   for (final d in _icons)
                     NavigationDestination(
                       icon: Icon(d.$1, color: C.navIcon),
-                      selectedIcon: Icon(d.$2, color: Colors.white),
+                      selectedIcon: Icon(d.$2, color: C.onPrimary),
                       label: d.$3,
                       tooltip: d.$3,
                     ),

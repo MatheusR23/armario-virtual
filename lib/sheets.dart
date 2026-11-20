@@ -65,7 +65,7 @@ class _PilhaSheetState extends State<PilhaSheet> {
                               width: 260,
                               height: 310,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: C.surface,
                                 borderRadius: BorderRadius.circular(24),
                                 border: Border.all(color: C.line),
                               ),
@@ -85,7 +85,7 @@ class _PilhaSheetState extends State<PilhaSheet> {
                         width: 260,
                         height: 310,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: C.surface,
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(color: C.line),
                           boxShadow: const [BoxShadow(color: Color(0x241D2930), blurRadius: 28, offset: Offset(0, 12))],
@@ -137,7 +137,7 @@ class _PilhaSheetState extends State<PilhaSheet> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => store.sendPilha(top.id, 'cesto'),
-                      icon: const Icon(Icons.arrow_forward_rounded, color: Color(0xFF9A6516)),
+                      icon: const Icon(Icons.arrow_forward_rounded, color: C.warnText),
                       label: const Text('Cesto'),
                     ),
                   ),
@@ -351,7 +351,7 @@ class _ConfirmUseSheetState extends State<ConfirmUseSheet> {
                             store.usedOn(p.id, day) ? 'Já registrada' : store.typeOf(p).name,
                             style: TextStyle(
                               fontSize: 12,
-                              color: store.usedOn(p.id, day) ? const Color(0xFF8A5A12) : C.text2,
+                              color: store.usedOn(p.id, day) ? C.warnText : C.text2,
                             ),
                           ),
                         ],

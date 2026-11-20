@@ -369,8 +369,8 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
                     height: 44,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white,
-                      border: Border.all(color: const Color(0xFF9FB1BB), width: 2),
+                      color: C.surface,
+                      border: Border.all(color: C.border, width: 2),
                     ),
                     child: const Icon(Icons.add_rounded, color: C.primaryDark),
                   ),
@@ -397,7 +397,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
                             color: Color(h),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: _ncHex == h ? C.primaryDark : const Color(0xFFC9D4DA),
+                              color: _ncHex == h ? C.accent : C.border,
                               width: _ncHex == h ? 3 : 1,
                             ),
                           ),
@@ -469,10 +469,10 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
           decoration: BoxDecoration(
             color: Color(c.hex),
             shape: BoxShape.circle,
-            border: Border.all(color: on ? C.primaryDark : Colors.white, width: on ? 3 : 2),
+            border: Border.all(color: on ? C.accent : C.surface, width: on ? 3 : 2),
             boxShadow: const [BoxShadow(color: Color(0x331D2930), blurRadius: 0, spreadRadius: 1)],
           ),
-          child: on ? Icon(Icons.check_rounded, size: 18, color: _isLight(c.hex) ? C.text : Colors.white) : null,
+          child: on ? Icon(Icons.check_rounded, size: 18, color: _isLight(c.hex) ? const Color(0xFF1D2930) : Colors.white) : null,
         ),
       ),
     );
@@ -482,7 +482,7 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
 
   Widget _panel({required List<Widget> children}) => Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFFF3F6F8), borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: C.surface2, borderRadius: BorderRadius.circular(16)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
       );
 }

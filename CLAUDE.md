@@ -39,6 +39,10 @@ Navegação: `tabIndex` (ValueNotifier) com 4 abas — Guarda-Roupas, Início (p
 - Até 3 camadas em cima e embaixo; a camada 1 é a interna.
 - Look: `colors` (cores principais escolhidas) e `photoPath` (opcional). Sem cores escolhidas, `store.lookColors` usa as cores das peças (filtro e bolinhas).
 - Textos curtos: sem subtítulos explicativos; rótulos de 1–3 palavras.
+- Sem dados de exemplo: a primeira abertura começa vazia, na aba Guarda-Roupas.
+- Grade do Guarda-Roupas: 2 a 4 colunas, ajustada com pinça (`Listener` em `wardrobe.dart`).
+- Tema claro/escuro/sistema (`themeMode` em `store.dart`, salvo no JSON). As cores de `C` são `AppColor` (implementa `Color`, lê `appDark`), então funcionam em `const`; trocar o tema remonta o `MaterialApp` (chave). Use sempre tokens de `C`, nunca `Colors.white`/hex soltos para fundos e textos.
+- Seletores de visualização (`SegTabs`) = abas com barra embaixo (estilo YouTube); opções de filtro = `YtChip`.
 
 ## Decisões e diferenças em relação ao prompt original
 

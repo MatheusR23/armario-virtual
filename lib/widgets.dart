@@ -154,7 +154,7 @@ class ColorDots extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Color(shown[i].hex),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1.5),
+                    border: Border.all(color: C.surface, width: 1.5),
                     boxShadow: const [BoxShadow(color: Color(0x401D2930), spreadRadius: 0.5)],
                   ),
                 ),
@@ -190,10 +190,12 @@ class ColorSwatchButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: Color(color.hex),
             shape: BoxShape.circle,
-            border: Border.all(color: selected ? C.primaryDark : Colors.white, width: selected ? 3 : 2),
+            border: Border.all(color: selected ? C.accent : C.surface, width: selected ? 3 : 2),
             boxShadow: const [BoxShadow(color: Color(0x331D2930), spreadRadius: 1)],
           ),
-          child: selected ? Icon(Icons.check_rounded, size: 18, color: light ? C.text : Colors.white) : null,
+          child: selected
+              ? Icon(Icons.check_rounded, size: 18, color: light ? const Color(0xFF1D2930) : Colors.white)
+              : null,
         ),
       ),
     );
@@ -249,14 +251,14 @@ class FilterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = active ? Colors.white : C.primaryDark;
+    final fg = active ? C.onAccent : C.text;
     return Semantics(
       button: true,
       selected: active,
       expanded: dropdown ? open : null,
       child: Material(
-        color: active ? C.primaryDark : Colors.white,
-        shape: StadiumBorder(side: BorderSide(color: active || open ? C.primaryDark : C.border, width: open ? 2 : 1)),
+        color: active ? C.accent : C.surface,
+        shape: StadiumBorder(side: BorderSide(color: active || open ? C.accent : C.border, width: open ? 2 : 1)),
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
@@ -315,8 +317,8 @@ class YtChip extends StatelessWidget {
     this.fontSize = 14,
   });
 
-  static const bg = Color(0xFFF0F2F3);
-  static const bgOn = Color(0xFF1D2930);
+  static const bg = C.surface2;
+  static const bgOn = C.accent;
 
   @override
   Widget build(BuildContext context) {
@@ -339,7 +341,7 @@ class YtChip extends StatelessWidget {
               children: [
                 if (leading != null) ...[
                   IconTheme.merge(
-                    data: IconThemeData(size: 18, color: selected ? Colors.white : C.text),
+                    data: IconThemeData(size: 18, color: selected ? C.onAccent : C.text),
                     child: leading!,
                   ),
                   if (label.isNotEmpty) const SizedBox(width: 6),
@@ -351,7 +353,7 @@ class YtChip extends StatelessWidget {
                     style: TextStyle(
                       fontSize: fontSize,
                       fontWeight: FontWeight.w600,
-                      color: selected ? Colors.white : C.text,
+                      color: selected ? C.onAccent : C.text,
                     ),
                   ),
               ],
@@ -363,32 +365,81 @@ class YtChip extends StatelessWidget {
   }
 }
 
-/// Seletor de uma opção (visualização, status, regra…) no estilo YouTube.
+/// Seletor de visualização no estilo das abas do YouTube: só o texto, sem
+/// fundo, com uma barra embaixo da opção ativa e uma linha fina sob todas.
 class SegTabs<T> extends StatelessWidget {
   final List<(T, String)> options;
   final T value;
   final ValueChanged<T> onChanged;
   final double fontSize;
-  const SegTabs({super.key, required this.options, required this.value, required this.onChanged, this.fontSize = 14});
+  const SegTabs({super.key, required this.options, required this.value, required this.onChanged, this.fontSize = 15});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final o in options)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: YtChip(
-                label: o.$2,
+    return Container(
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: C.divider))),
+      alignment: Alignment.centerLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final o in options)
+              Semantics(
+                button: true,
                 selected: o.$1 == value,
-                fontSize: fontSize,
-                onTap: () => onChanged(o.$1),
+                child: InkWell(
+                  onTap: () => onChanged(o.$1),
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: o.$1 == value ? C.accent : const Color(0x00000000), width: 3),
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      o.$2,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        fontWeight: o.$1 == value ? FontWeight.w700 : FontWeight.w500,
+                        color: o.$1 == value ? C.text : C.text2,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// Véu cinza semitransparente sobre a imagem (peça não selecionada). A imagem
+/// em si não fica transparente.
+class Veiled extends StatelessWidget {
+  final bool veiled;
+  final Widget child;
+  final double radius;
+  const Veiled({super.key, required this.veiled, required this.child, this.radius = 0});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!veiled) return child;
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: C.veil, borderRadius: BorderRadius.circular(radius)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -414,7 +465,7 @@ class Card2 extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: padding,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: C.surface,
           borderRadius: BorderRadius.circular(20),
           boxShadow: const [BoxShadow(color: Color(0x0F1D2930), blurRadius: 8, offset: Offset(0, 2))],
         ),
@@ -547,7 +598,7 @@ Future<void> showAppSheet(BuildContext context, Widget Function(BuildContext) bu
     isScrollControlled: true,
     showDragHandle: true,
     useSafeArea: true,
-    backgroundColor: Colors.white,
+    backgroundColor: C.surface,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
     builder: builder,
   );
@@ -595,7 +646,7 @@ class SheetFrame extends StatelessWidget {
             if (footer != null)
               Container(
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-                decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFEEF2F4)))),
+                decoration: const BoxDecoration(border: Border(top: BorderSide(color: C.divider))),
                 child: footer,
               ),
           ],

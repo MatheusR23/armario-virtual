@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models.dart';
+import 'theme.dart';
 
 const Map<String, String> kCats = {
   'cima': 'Parte de cima',
@@ -112,11 +113,11 @@ class StatusMeta {
 StatusMeta statusMeta(String s) {
   switch (s) {
     case 'emUso':
-      return const StatusMeta('Em uso', Color(0xFFDCE9F2), Color(0xFF2B5674));
+      return const StatusMeta('Em uso', AppColor(0xFFDCE9F2, 0xFF1E3442), AppColor(0xFF2B5674, 0xFFA9CBE2));
     case 'cesto':
-      return const StatusMeta('No cesto', Color(0xFFF7E9D2), Color(0xFF7A4F0E));
+      return const StatusMeta('No cesto', AppColor(0xFFF7E9D2, 0xFF3A2E1A), AppColor(0xFF7A4F0E, 0xFFEBC488));
     default:
-      return const StatusMeta('Guardado', Color(0xFFDDF0E6), Color(0xFF1F5C42));
+      return const StatusMeta('Guardado', AppColor(0xFFDDF0E6, 0xFF1C3A2D), AppColor(0xFF1F5C42, 0xFF9AD9B9));
   }
 }
 

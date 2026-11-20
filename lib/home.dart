@@ -55,7 +55,7 @@ class HomePage extends StatelessWidget {
                   FloatingActionButton(
                     heroTag: 'fab-pilha',
                     tooltip: 'Pilha de roupas',
-                    backgroundColor: Colors.white,
+                    backgroundColor: C.surface,
                     foregroundColor: C.primaryDark,
                     shape: const CircleBorder(),
                     onPressed: () => showPilha(context),
@@ -70,8 +70,8 @@ class HomePage extends StatelessWidget {
                   FloatingActionButton(
                     heroTag: 'fab-cesto',
                     tooltip: 'Cesto de roupas sujas',
-                    backgroundColor: C.primaryDark,
-                    foregroundColor: Colors.white,
+                    backgroundColor: C.primary,
+                    foregroundColor: C.onPrimary,
                     shape: const CircleBorder(),
                     onPressed: () => showCesto(context),
                     child: Badge(
@@ -92,7 +92,7 @@ class HomePage extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 decoration: const BoxDecoration(
-                  color: Color(0xF2F7F9FA),
+                  color: C.bg,
                   border: Border(top: BorderSide(color: C.line)),
                 ),
                 child: Row(
@@ -235,7 +235,7 @@ class LayerColumn extends StatelessWidget {
                   ? Container(
                       padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
-                        color: C.primaryDark,
+                        color: C.accent,
                         borderRadius: BorderRadius.circular(999),
                         boxShadow: const [BoxShadow(color: Color(0x381D2930), blurRadius: 8, offset: Offset(0, 3))],
                       ),
@@ -247,7 +247,7 @@ class LayerColumn extends StatelessWidget {
                             height: 30,
                             child: Center(
                               child: Text('${i + 1}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                                  style: const TextStyle(color: C.onAccent, fontWeight: FontWeight.w700)),
                             ),
                           ),
                           if (arr.length > 1)
@@ -278,7 +278,7 @@ class LayerColumn extends StatelessWidget {
                           width: 32,
                           height: 32,
                           decoration: const BoxDecoration(
-                            color: Color(0xFFE1E8EC),
+                            color: C.seg,
                             shape: BoxShape.circle,
                             boxShadow: [BoxShadow(color: Color(0x1F1D2930), blurRadius: 4, offset: Offset(0, 1))],
                           ),
@@ -304,7 +304,7 @@ class LayerColumn extends StatelessWidget {
                   child: Container(
                     width: 32,
                     height: 32,
-                    decoration: const BoxDecoration(color: Color(0xFFE1E8EC), shape: BoxShape.circle),
+                    decoration: const BoxDecoration(color: C.seg, shape: BoxShape.circle),
                     child: const Icon(Icons.add_rounded, size: 18, color: C.primaryDark),
                   ),
                 ),
@@ -404,12 +404,12 @@ class _CoverCarouselState extends State<CoverCarousel> {
                   width: _kCardW - 12,
                   height: _kCardH,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFC9D6DD),
+                    color: C.tile,
                     borderRadius: BorderRadius.circular(22),
                     border: Border.all(color: C.primaryDark, width: 4),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: PieceArt(pk.$2, radius: 18, padding: 14, opacity: 0.85),
+                  child: PieceArt(pk.$2, radius: 18, padding: 14),
                 ),
               ),
             ),
@@ -433,15 +433,11 @@ class _CoverCarouselState extends State<CoverCarousel> {
                   }
                   final diff = (page - p).abs();
                   final scale = (1 - diff * 0.22).clamp(0.6, 1.0).toDouble();
-                  final opacity = (1 - diff * 0.35).clamp(0.3, 1.0).toDouble();
                   final isCenter = diff < 0.5;
                   return Center(
-                    child: Opacity(
-                      opacity: opacity,
-                      child: Transform.scale(
-                        scale: scale,
-                        child: _card(idx, p, isCenter),
-                      ),
+                    child: Transform.scale(
+                      scale: scale,
+                      child: _card(idx, p, isCenter),
                     ),
                   );
                 },
@@ -507,14 +503,15 @@ class _CoverCarouselState extends State<CoverCarousel> {
                 ? const [BoxShadow(color: Color(0x331D2930), blurRadius: 20, offset: Offset(0, 8))]
                 : const [BoxShadow(color: Color(0x1A1D2930), blurRadius: 6, offset: Offset(0, 2))],
           ),
-          // Peça não selecionada: acinzentada e transparente.
-          child: _Dimmed(
-            dimmed: !selected,
+          // Peça não selecionada: imagem opaca com um véu cinza por cima.
+          child: Veiled(
+            veiled: !selected,
+            radius: 22,
             child: PieceArt(
               piece,
               radius: selected ? 18 : 22,
               padding: 18,
-              background: selected ? C.tile : const Color(0xFFD9E2E7),
+              background: selected ? C.tile : C.tileOff,
             ),
           ),
         ),
@@ -526,26 +523,6 @@ class _CoverCarouselState extends State<CoverCarousel> {
 const double _kCarouselHeight = 270;
 const double _kCardW = 176;
 const double _kCardH = 212;
-
-/// Acinzenta e deixa semitransparente o que não está selecionado.
-class _Dimmed extends StatelessWidget {
-  final bool dimmed;
-  final Widget child;
-  const _Dimmed({required this.dimmed, required this.child});
-
-  static const _gray = ColorFilter.matrix(<double>[
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0.2126, 0.7152, 0.0722, 0, 0,
-    0, 0, 0, 1, 0,
-  ]);
-
-  @override
-  Widget build(BuildContext context) {
-    if (!dimmed) return child;
-    return Opacity(opacity: 0.55, child: ColorFiltered(colorFilter: _gray, child: child));
-  }
-}
 
 class _AccessoriesSection extends StatelessWidget {
   const _AccessoriesSection();
@@ -609,7 +586,7 @@ class _AccessoryTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: selected ? C.primaryDark : Colors.transparent, width: 3),
                       ),
-                      child: _Dimmed(dimmed: !selected, child: PieceArt(piece, radius: 11, padding: 8)),
+                      child: Veiled(veiled: !selected, radius: 11, child: PieceArt(piece, radius: 11, padding: 8)),
                     ),
                   ),
                   if (selected)
@@ -619,8 +596,8 @@ class _AccessoryTile extends StatelessWidget {
                       child: Container(
                         width: 22,
                         height: 22,
-                        decoration: const BoxDecoration(color: C.primaryDark, shape: BoxShape.circle),
-                        child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                        decoration: const BoxDecoration(color: C.accent, shape: BoxShape.circle),
+                        child: const Icon(Icons.check_rounded, size: 14, color: C.onAccent),
                       ),
                     ),
                 ],
