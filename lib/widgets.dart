@@ -105,12 +105,15 @@ class PieceArt extends StatelessWidget {
   }
 }
 
+const double kPhotoMaxHeight = 640;
+
 /// Tira ou escolhe uma foto e salva na pasta do app. Retorna o caminho, ou
 /// `null` se a pessoa cancelar. Mostra um aviso se a câmera/galeria falhar.
 Future<String?> pickAppPhoto(BuildContext context, ImageSource source) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
-    final x = await ImagePicker().pickImage(source: source, maxWidth: 1400, imageQuality: 85);
+    // Toda foto é reduzida para no máximo 640px de altura (mantém a proporção).
+    final x = await ImagePicker().pickImage(source: source, maxHeight: kPhotoMaxHeight, imageQuality: 85);
     if (x == null) return null;
     final dir = await getApplicationDocumentsDirectory();
     final dest = '${dir.path}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -226,12 +229,14 @@ class LookArt extends StatelessWidget {
 }
 
 /// Botão de filtro no estilo de busca de imagens: "Cor ▾", ativo fica escuro.
+/// Com [open], a seta vira para cima (as opções estão abertas logo abaixo).
 class FilterButton extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
   final Widget? leading;
   final bool dropdown;
+  final bool open;
   const FilterButton({
     super.key,
     required this.label,
@@ -239,6 +244,7 @@ class FilterButton extends StatelessWidget {
     required this.onTap,
     this.leading,
     this.dropdown = true,
+    this.open = false,
   });
 
   @override
@@ -247,9 +253,10 @@ class FilterButton extends StatelessWidget {
     return Semantics(
       button: true,
       selected: active,
+      expanded: dropdown ? open : null,
       child: Material(
         color: active ? C.primaryDark : Colors.white,
-        shape: StadiumBorder(side: BorderSide(color: active ? C.primaryDark : C.border)),
+        shape: StadiumBorder(side: BorderSide(color: active || open ? C.primaryDark : C.border, width: open ? 2 : 1)),
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
@@ -260,9 +267,12 @@ class FilterButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (leading != null) ...[leading!, const SizedBox(width: 6)],
+                if (leading != null) ...[
+                  IconTheme.merge(data: IconThemeData(size: 18, color: fg), child: leading!),
+                  const SizedBox(width: 6),
+                ],
                 Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: fg)),
-                if (dropdown) Icon(Icons.arrow_drop_down_rounded, color: fg),
+                if (dropdown) Icon(open ? Icons.arrow_drop_up_rounded : Icons.arrow_drop_down_rounded, color: fg),
               ],
             ),
           ),
@@ -288,7 +298,72 @@ class StatusBadge extends StatelessWidget {
   }
 }
 
-/// Seletor segmentado (fundo cinza, opção ativa em branco).
+/// Chip no estilo da barra de categorias do YouTube: cantos de 8px, cinza
+/// claro quando solto e escuro com texto branco quando selecionado.
+class YtChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget? leading;
+  final double fontSize;
+  const YtChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.leading,
+    this.fontSize = 14,
+  });
+
+  static const bg = Color(0xFFF0F2F3);
+  static const bgOn = Color(0xFF1D2930);
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        // 32px visíveis + margem vertical = 44px de toque.
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(color: selected ? bgOn : bg, borderRadius: BorderRadius.circular(8)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (leading != null) ...[
+                  IconTheme.merge(
+                    data: IconThemeData(size: 18, color: selected ? Colors.white : C.text),
+                    child: leading!,
+                  ),
+                  if (label.isNotEmpty) const SizedBox(width: 6),
+                ],
+                if (label.isNotEmpty)
+                  Text(
+                    label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : C.text,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Seletor de uma opção (visualização, status, regra…) no estilo YouTube.
 class SegTabs<T> extends StatelessWidget {
   final List<(T, String)> options;
   final T value;
@@ -298,42 +373,18 @@ class SegTabs<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: C.seg, borderRadius: BorderRadius.circular(14)),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           for (final o in options)
-            Expanded(
-              child: Semantics(
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: YtChip(
+                label: o.$2,
                 selected: o.$1 == value,
-                button: true,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onChanged(o.$1),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: o.$1 == value ? Colors.white : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: o.$1 == value
-                          ? const [BoxShadow(color: Color(0x1A1D2930), blurRadius: 4, offset: Offset(0, 1))]
-                          : null,
-                    ),
-                    child: Text(
-                      o.$2,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        fontWeight: FontWeight.w600,
-                        color: o.$1 == value ? C.text : C.text2,
-                      ),
-                    ),
-                  ),
-                ),
+                fontSize: fontSize,
+                onTap: () => onChanged(o.$1),
               ),
             ),
         ],
@@ -350,23 +401,8 @@ class Pill extends StatelessWidget {
   const Pill({super.key, required this.label, required this.selected, required this.onTap, this.leading});
 
   @override
-  Widget build(BuildContext context) {
-    return FilterChip(
-      selected: selected,
-      onSelected: (_) => onTap(),
-      avatar: leading,
-      label: Text(label),
-      labelStyle: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: selected ? Colors.white : C.primaryDark,
-      ),
-      selectedColor: C.primaryDark,
-      backgroundColor: Colors.white,
-      side: BorderSide(color: selected ? C.primaryDark : C.border),
-      showCheckmark: false,
-    );
-  }
+  Widget build(BuildContext context) =>
+      YtChip(label: label, selected: selected, onTap: onTap, leading: leading);
 }
 
 class Card2 extends StatelessWidget {

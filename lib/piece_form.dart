@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'catalog.dart';
 import 'models.dart';
@@ -77,25 +76,12 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
   }
 
   Future<void> _pickPhoto(ImageSource source) async {
-    try {
-      final x = await ImagePicker().pickImage(source: source, maxWidth: 1400, imageQuality: 85);
-      if (x == null) return;
-      final dir = await getApplicationDocumentsDirectory();
-      final dest = '${dir.path}/foto_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      await x.saveTo(dest);
-      if (!mounted) return;
-      setState(() {
-        _photo = dest;
-        _photoError = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(source == ImageSource.camera
-            ? 'Câmera indisponível.'
-            : 'Galeria indisponível.'),
-      ));
-    }
+    final dest = await pickAppPhoto(context, source);
+    if (dest == null || !mounted) return;
+    setState(() {
+      _photo = dest;
+      _photoError = false;
+    });
   }
 
   void _save() {

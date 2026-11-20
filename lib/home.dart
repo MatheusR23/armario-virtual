@@ -159,24 +159,24 @@ class _CarouselSection extends StatelessWidget {
     final Piece? cur = list.isEmpty ? null : list[f];
     final slot = store.slotId(key);
     final centerSel = cur != null && slot == cur.id;
-    final peeks = <int>[];
+    // Peças das outras camadas, mostradas atrás do carrossel.
+    final peeks = <(int, Piece)>[];
     if (layered) {
       final arr = store.layersOf(key);
       final l = store.sel.layer[key]!;
       for (var i = 0; i < arr.length; i++) {
-        if (i != l && arr[i] != null) peeks.add(i - l);
+        final p = i == l ? null : store.byId(arr[i]);
+        if (p != null) peeks.add((i - l, p));
       }
     }
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Column(
         children: [
-          Text(kSectionTitles[key]!, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
           if (cur == null)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Text('Nenhuma peça disponível nesta parte.', style: TextStyle(color: C.text2)),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text('Sem ${kSectionTitles[key]!.toLowerCase()}', style: const TextStyle(color: C.text2)),
             )
           else ...[
             CoverCarousel(
@@ -189,11 +189,6 @@ class _CarouselSection extends StatelessWidget {
               onTapCenter: (i) => store.tapCenter(key, list, i),
               overlay: layered ? LayerColumn(sectionKey: key) : null,
             ),
-            const SizedBox(height: 4),
-            Text(cur.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -224,8 +219,12 @@ class LayerColumn extends StatelessWidget {
     final key = sectionKey;
     final arr = store.layersOf(key);
     final l = store.sel.layer[key]!;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    // Altura fixa de 3 camadas: com 1 ou 2, os números ficam no topo,
+    // na mesma posição de quando há 3.
+    return SizedBox(
+      height: 44.0 * 3,
+      child: Column(
+      mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         for (var i = 0; i < arr.length; i++)
@@ -313,6 +312,7 @@ class LayerColumn extends StatelessWidget {
             ),
           ),
       ],
+      ),
     );
   }
 }
@@ -322,7 +322,7 @@ class CoverCarousel extends StatefulWidget {
   final List<Piece> items;
   final int focus;
   final bool centerSelected;
-  final List<int> peeks;
+  final List<(int, Piece)> peeks;
   final ValueChanged<int> onFocus;
   final ValueChanged<int> onTapCenter;
   final Widget? overlay;
@@ -352,7 +352,7 @@ class _CoverCarouselState extends State<CoverCarousel> {
   @override
   void initState() {
     super.initState();
-    _ctrl = PageController(viewportFraction: 0.4, initialPage: _pageFor(widget.focus));
+    _ctrl = PageController(viewportFraction: 0.5, initialPage: _pageFor(widget.focus));
   }
 
   @override
@@ -392,21 +392,24 @@ class _CoverCarouselState extends State<CoverCarousel> {
   Widget build(BuildContext context) {
     final n = _n;
     return SizedBox(
-      height: 200,
+      height: _kCarouselHeight,
       child: Stack(
         children: [
-          for (final k in widget.peeks)
+          // Camadas de trás: aparecem deslocadas, com a foto da peça.
+          for (final pk in widget.peeks)
             Center(
               child: Transform.translate(
-                offset: Offset(0, k * 18.0),
+                offset: Offset(0, pk.$1 * 22.0),
                 child: Container(
-                  width: 124,
-                  height: 152,
+                  width: _kCardW - 12,
+                  height: _kCardH,
                   decoration: BoxDecoration(
                     color: const Color(0xFFC9D6DD),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(22),
                     border: Border.all(color: C.primaryDark, width: 4),
                   ),
+                  clipBehavior: Clip.antiAlias,
+                  child: PieceArt(pk.$2, radius: 18, padding: 14, opacity: 0.85),
                 ),
               ),
             ),
@@ -472,7 +475,7 @@ class _CoverCarouselState extends State<CoverCarousel> {
             ),
           ],
           if (widget.overlay != null)
-            Positioned(right: 40, top: 0, bottom: 0, child: Center(child: widget.overlay!)),
+            Positioned(right: 36, top: 0, bottom: 0, child: Center(child: widget.overlay!)),
         ],
       ),
     );
@@ -495,45 +498,52 @@ class _CoverCarouselState extends State<CoverCarousel> {
           }
         },
         child: Container(
-          width: 136,
-          height: 152,
+          width: _kCardW,
+          height: _kCardH,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: isCenter
-                ? Border.all(color: selected ? C.primaryDark : const Color(0xFF8FA3AE), width: selected ? 4 : 3)
-                : null,
-            boxShadow: isCenter
+            borderRadius: BorderRadius.circular(22),
+            border: selected ? Border.all(color: C.primaryDark, width: 4) : null,
+            boxShadow: selected
                 ? const [BoxShadow(color: Color(0x331D2930), blurRadius: 20, offset: Offset(0, 8))]
                 : const [BoxShadow(color: Color(0x1A1D2930), blurRadius: 6, offset: Offset(0, 2))],
           ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: PieceArt(
-                  piece,
-                  radius: isCenter ? 16 : 20,
-                  background: isCenter ? C.tile : const Color(0xFFD9E2E7),
-                ),
-              ),
-              if (isCenter && !selected)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 8,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(999)),
-                      child: const Text('Toque para usar',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: C.primaryDark)),
-                    ),
-                  ),
-                ),
-            ],
+          // Peça não selecionada: acinzentada e transparente.
+          child: _Dimmed(
+            dimmed: !selected,
+            child: PieceArt(
+              piece,
+              radius: selected ? 18 : 22,
+              padding: 18,
+              background: selected ? C.tile : const Color(0xFFD9E2E7),
+            ),
           ),
         ),
       ),
     );
+  }
+}
+
+const double _kCarouselHeight = 270;
+const double _kCardW = 176;
+const double _kCardH = 212;
+
+/// Acinzenta e deixa semitransparente o que não está selecionado.
+class _Dimmed extends StatelessWidget {
+  final bool dimmed;
+  final Widget child;
+  const _Dimmed({required this.dimmed, required this.child});
+
+  static const _gray = ColorFilter.matrix(<double>[
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0.2126, 0.7152, 0.0722, 0, 0,
+    0, 0, 0, 1, 0,
+  ]);
+
+  @override
+  Widget build(BuildContext context) {
+    if (!dimmed) return child;
+    return Opacity(opacity: 0.55, child: ColorFiltered(colorFilter: _gray, child: child));
   }
 }
 
@@ -561,7 +571,7 @@ class _AccessoriesSection extends StatelessWidget {
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 8,
               crossAxisSpacing: 8,
-              childAspectRatio: 0.74,
+              childAspectRatio: 1,
               children: [
                 for (final p in list)
                   _AccessoryTile(piece: p, selected: store.sel.acess.contains(p.id)),
@@ -599,7 +609,7 @@ class _AccessoryTile extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: selected ? C.primaryDark : Colors.transparent, width: 3),
                       ),
-                      child: PieceArt(piece, radius: 11, padding: 8),
+                      child: _Dimmed(dimmed: !selected, child: PieceArt(piece, radius: 11, padding: 8)),
                     ),
                   ),
                   if (selected)
@@ -616,11 +626,6 @@ class _AccessoryTile extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(piece.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
