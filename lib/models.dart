@@ -214,3 +214,75 @@ class Removal {
   factory Removal.fromJson(Map<String, dynamic> j) => Removal(
       j['itemId'] as String, (j['reason'] as String?) ?? '', (j['day'] as num).toInt());
 }
+
+/// Um uso registrado: as peças vestidas num dia, ligadas a um look salvo
+/// quando o uso veio de um look. É o que aparece no Histórico.
+class Wear {
+  final String id;
+  int day;
+  String? lookId;
+  List<String> items;
+  Wear({required this.id, required this.day, this.lookId, List<String>? items}) : items = items ?? <String>[];
+
+  Map<String, dynamic> toJson() => {'id': id, 'day': day, 'lookId': lookId, 'items': items};
+  factory Wear.fromJson(Map<String, dynamic> j) => Wear(
+        id: j['id'] as String,
+        day: (j['day'] as num).toInt(),
+        lookId: j['lookId'] as String?,
+        items: ((j['items'] as List?) ?? const []).map((e) => e.toString()).toList(),
+      );
+}
+
+/// Último clima obtido (guardado para mostrar sem internet).
+class WeatherData {
+  final String city;
+  final double lat;
+  final double lon;
+  final double? temp;
+  final double? min;
+  final double? max;
+  final int? rain;
+  final int? code;
+  final int? at; // milissegundos desde a época
+
+  const WeatherData({
+    required this.city,
+    required this.lat,
+    required this.lon,
+    this.temp,
+    this.min,
+    this.max,
+    this.rain,
+    this.code,
+    this.at,
+  });
+
+  bool get hasData => temp != null;
+
+  Map<String, dynamic> toJson() => {
+        'city': city,
+        'lat': lat,
+        'lon': lon,
+        'temp': temp,
+        'min': min,
+        'max': max,
+        'rain': rain,
+        'code': code,
+        'at': at,
+      };
+
+  factory WeatherData.fromJson(Map<String, dynamic> j) {
+    double? d(String k) => (j[k] as num?)?.toDouble();
+    return WeatherData(
+      city: (j['city'] as String?) ?? '',
+      lat: d('lat') ?? 0,
+      lon: d('lon') ?? 0,
+      temp: d('temp'),
+      min: d('min'),
+      max: d('max'),
+      rain: (j['rain'] as num?)?.toInt(),
+      code: (j['code'] as num?)?.toInt(),
+      at: (j['at'] as num?)?.toInt(),
+    );
+  }
+}

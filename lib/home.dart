@@ -5,6 +5,7 @@ import 'models.dart';
 import 'sheets.dart';
 import 'store.dart';
 import 'theme.dart';
+import 'weather.dart';
 import 'widgets.dart';
 
 const Map<String, String> kSectionTitles = {
@@ -35,7 +36,11 @@ class HomePage extends StatelessWidget {
                   name.isEmpty ? 'Olá!' : 'Olá, $name',
                   style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, height: 1.2),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
+                // Sem const: precisa redesenhar quando o clima muda.
+                // ignore: prefer_const_constructors
+                WeatherStrip(),
+                const SizedBox(height: 16),
                 const Center(
                   child: Text('Roupas de hoje', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                 ),
@@ -44,7 +49,10 @@ class HomePage extends StatelessWidget {
                   _MissingBanner(names: store.sel.missing.map((m) => m.split('|').last).toList()),
                 ],
                 for (final key in const ['cima', 'baixo', 'calcado']) _CarouselSection(sectionKey: key),
-                const _AccessoriesSection(),
+                // Sem const: um widget const não é redesenhado quando a
+                // seleção muda, e os acessórios não apareciam marcados.
+                // ignore: prefer_const_constructors
+                _AccessoriesSection(),
               ],
             ),
             Positioned(

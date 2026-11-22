@@ -5,6 +5,7 @@ import 'backup.dart';
 import 'catalog.dart';
 import 'store.dart';
 import 'theme.dart';
+import 'weather.dart';
 import 'widgets.dart';
 
 class MenuPage extends StatefulWidget {
@@ -98,6 +99,21 @@ class _MenuPageState extends State<MenuPage> {
                         value: mode,
                         onChanged: store.setTheme,
                       ),
+                    ),
+                  ),
+                  ListenableBuilder(
+                    listenable: store,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.wb_cloudy_outlined, color: C.primaryDark),
+                      title: const Text('Cidade do clima'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(store.weather?.city ?? 'Desligado', style: const TextStyle(color: C.text2)),
+                          const Icon(Icons.chevron_right_rounded),
+                        ],
+                      ),
+                      onTap: () => showCitySheet(context),
                     ),
                   ),
                   const ListTile(

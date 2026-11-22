@@ -57,6 +57,9 @@ class Store extends ChangeNotifier {
   List<PieceType> customTypes = [];
   List<ColorTag> customColors = [];
   List<String> extraTags = [];
+  List<String> customOccasions = [];
+  List<Wear> wears = [];
+  WeatherData? weather;
   Map<String, String> rules = {};
   String profileName = '';
   int cols = 2;
@@ -167,6 +170,9 @@ class Store extends ChangeNotifier {
         'customTypes': customTypes.map((e) => e.toJson()).toList(),
         'customColors': customColors.map((e) => e.toJson()).toList(),
         'extraTags': extraTags,
+        'customOccasions': customOccasions,
+        'wears': wears.map((e) => e.toJson()).toList(),
+        'weather': weather?.toJson(),
         'rules': rules,
         'profileName': profileName,
         'cols': cols,
@@ -186,6 +192,14 @@ class Store extends ChangeNotifier {
     customTypes = l('customTypes').map(PieceType.fromJson).toList();
     customColors = l('customColors').map(ColorTag.fromJson).toList();
     extraTags = ((j['extraTags'] as List?) ?? const []).map((e) => e.toString()).toList();
+    customOccasions = ((j['customOccasions'] as List?) ?? const []).map((e) => e.toString()).toList();
+    if (j['wears'] is List) {
+      wears = l('wears').map(Wear.fromJson).toList();
+    } else {
+      _migrateWears();
+    }
+    final w = j['weather'];
+    weather = w is Map ? WeatherData.fromJson(Map<String, dynamic>.from(w)) : null;
     rules = {};
     final r = j['rules'];
     if (r is Map) {
@@ -195,6 +209,30 @@ class Store extends ChangeNotifier {
     cols = ((j['cols'] as num?)?.toInt() ?? 2).clamp(kMinCols, kMaxCols);
     final th = j['theme'];
     if (th is String && const ['sistema', 'claro', 'escuro'].contains(th)) themeMode.value = th;
+  }
+
+  /// Dados antigos (sem histórico): agrupa os usos por dia e liga ao look
+  /// usado naquele dia quando as peças batem.
+  void _migrateWears() {
+    wears = [];
+    final byDay = <int, List<String>>{};
+    for (final l in log) {
+      (byDay[l.day] ??= <String>[]).add(l.itemId);
+    }
+    var n = 0;
+    for (final e in byDay.entries) {
+      final rest = List<String>.of(e.value);
+      for (final ll in lookLog.where((x) => x.day == e.key)) {
+        final lk = lookById(ll.lookId);
+        if (lk == null) continue;
+        final ids = lk.pieceIds();
+        final mine = rest.where(ids.contains).toList();
+        if (mine.isEmpty) continue;
+        rest.removeWhere(mine.contains);
+        wears.add(Wear(id: 'w${e.key}_${n++}', day: e.key, lookId: lk.id, items: mine));
+      }
+      if (rest.isNotEmpty) wears.add(Wear(id: 'w${e.key}_${n++}', day: e.key, items: rest));
+    }
   }
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(_toJson());
@@ -247,6 +285,8 @@ class Store extends ChangeNotifier {
     customTypes = [];
     customColors = [];
     extraTags = [];
+    customOccasions = [];
+    wears = [];
     rules = {};
     undo = null;
     sel = Selection();
@@ -409,35 +449,121 @@ class Store extends ChangeNotifier {
 
   /// Registra o uso das peças selecionadas. Retorna (registradas, já existentes).
   (int, int) confirmUse(int day) {
-    final ids = sel.ids();
-    var ok = 0;
+    final ok = <String>[];
     var dup = 0;
-    for (final id in ids) {
-      final p = byId(id);
-      if (p == null) continue;
+    for (final id in sel.ids()) {
+      if (byId(id) == null) continue;
       if (usedOn(id, day)) {
         dup++;
         continue;
       }
-      ok++;
-      log.add(UseLog(id, day));
-      p.total++;
-      p.since++;
-      p.lastUse = math.max(p.lastUse ?? -1, day);
-      p.status = 'emUso';
+      ok.add(id);
     }
-    final fl = sel.fromLook;
-    if (fl != null && ok > 0) {
-      final lk = lookById(fl);
-      if (lk != null) {
-        lk.uses++;
-        if (!lookLog.any((x) => x.lookId == fl && x.day == day)) lookLog.add(LookLog(fl, day));
+    if (ok.isNotEmpty) {
+      final w = Wear(
+        id: 'w${DateTime.now().millisecondsSinceEpoch}',
+        day: day,
+        lookId: lookById(sel.fromLook)?.id,
+        items: ok,
+      );
+      wears.add(w);
+      _applyWear(w, 1);
+      for (final id in ok) {
+        byId(id)!.status = 'emUso';
       }
     }
     sel = Selection();
     focus.clear();
     commit();
-    return (ok, dup);
+    return (ok.length, dup);
+  }
+
+  // ---------------------------------------------------------------- Histórico de usos
+  /// Usos do mais recente para o mais antigo.
+  List<Wear> get history {
+    final l = List<Wear>.of(wears);
+    l.sort((a, b) => a.day != b.day ? b.day.compareTo(a.day) : b.id.compareTo(a.id));
+    return l;
+  }
+
+  Wear? wearById(String? id) {
+    for (final w in wears) {
+      if (w.id == id) return w;
+    }
+    return null;
+  }
+
+  /// Soma (sign = 1) ou desfaz (sign = -1) os efeitos de um uso: registros,
+  /// contadores das peças e usos do look.
+  void _applyWear(Wear w, int sign) {
+    for (final id in w.items) {
+      final p = byId(id);
+      if (p == null) continue;
+      final countsSince = p.lastWash == null || w.day >= p.lastWash!;
+      if (sign > 0) {
+        log.add(UseLog(id, w.day));
+        p.total++;
+        if (countsSince) p.since++;
+        p.lastUse = math.max(p.lastUse ?? -1, w.day);
+      } else {
+        final i = log.indexWhere((l) => l.itemId == id && l.day == w.day);
+        if (i >= 0) log.removeAt(i);
+        p.total = math.max(0, p.total - 1);
+        if (countsSince) p.since = math.max(0, p.since - 1);
+        if (p.lastUse == w.day) {
+          final days = log.where((l) => l.itemId == id).map((l) => l.day);
+          p.lastUse = days.isEmpty ? null : days.reduce(math.max);
+        }
+      }
+    }
+    final lk = lookById(w.lookId);
+    if (lk == null) return;
+    if (sign > 0) {
+      lk.uses++;
+      if (!lookLog.any((x) => x.lookId == lk.id && x.day == w.day)) lookLog.add(LookLog(lk.id, w.day));
+    } else {
+      lk.uses = math.max(0, lk.uses - 1);
+      final other = wears.any((o) => !identical(o, w) && o.lookId == lk.id && o.day == w.day);
+      if (!other) lookLog.removeWhere((x) => x.lookId == lk.id && x.day == w.day);
+    }
+  }
+
+  /// Cria ([id] nulo) ou altera um uso. Retorna a mensagem de erro, ou null.
+  String? saveWear({String? id, required int day, String? lookId, required List<String> items}) {
+    final list = <String>[];
+    for (final x in items) {
+      if (!list.contains(x) && byId(x) != null) list.add(x);
+    }
+    if (list.isEmpty) return 'Escolha ao menos uma peça.';
+    final old = wearById(id);
+    if (old != null) _applyWear(old, -1);
+    final clash = list.where((x) => usedOn(x, day)).map((x) => byId(x)!.name).toList();
+    if (clash.isNotEmpty) {
+      if (old != null) _applyWear(old, 1);
+      return '${joinNames(clash)} já ${clash.length > 1 ? 'têm' : 'tem'} uso nesse dia.';
+    }
+    final w = old ?? Wear(id: 'w${DateTime.now().millisecondsSinceEpoch}', day: day);
+    w.day = day;
+    w.lookId = lookById(lookId)?.id;
+    w.items = list;
+    if (old == null) wears.add(w);
+    _applyWear(w, 1);
+    commit();
+    return null;
+  }
+
+  void deleteWear(String id) {
+    final w = wearById(id);
+    if (w == null) return;
+    _applyWear(w, -1);
+    wears.remove(w);
+    commit();
+  }
+
+  // ---------------------------------------------------------------- Clima
+  void setWeather(WeatherData? w) {
+    weather = w;
+    commit();
   }
 
   // ---------------------------------------------------------------- Pilha e Cesto
@@ -583,13 +709,26 @@ class Store extends ChangeNotifier {
     return out;
   }
 
-  /// Ocasiões já usadas nos looks, mais as padrão.
+  /// Ocasiões padrão, criadas e as já usadas nos looks.
   List<String> get occasions {
     final s = <String>[...kOccasions];
+    for (final o in customOccasions) {
+      if (!s.contains(o)) s.add(o);
+    }
     for (final l in looks) {
       if (l.occasion.isNotEmpty && !s.contains(l.occasion)) s.add(l.occasion);
     }
     return s;
+  }
+
+  /// Cria uma ocasião. Retorna a mensagem de erro, ou null se deu certo.
+  String? addOccasion(String name) {
+    final n = name.trim();
+    if (n.isEmpty) return 'Informe a ocasião.';
+    if (occasions.any((o) => norm(o) == norm(n))) return 'Essa ocasião já existe.';
+    customOccasions.add(n);
+    commit();
+    return null;
   }
 
   void toggleFav(String id) {
@@ -619,6 +758,9 @@ class Store extends ChangeNotifier {
   void deleteLook(String id) {
     looks.removeWhere((l) => l.id == id);
     lookLog.removeWhere((l) => l.lookId == id);
+    for (final w in wears) {
+      if (w.lookId == id) w.lookId = null;
+    }
     commit();
   }
 

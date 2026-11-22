@@ -27,6 +27,8 @@ App Android em Flutter para organizar roupas, montar looks em camadas, registrar
 | `tracking.dart` | Rastreio: períodos e intervalo personalizado, ranking, calendário por peça ou look |
 | `menu.dart` | Perfil, regras pós-uso, backup (salvar, enviar, restaurar), dados, feedback por e-mail |
 | `backup.dart` | Monta/lê o `.zip` de backup, salvar em arquivo, compartilhar, restaurar, CSV |
+| `history.dart` | Histórico de usos (aba Histórico do Rastreio): lista look/peças + data, editar data, look e peças, apagar, adicionar uso |
+| `weather.dart` | Clima resumido (Open-Meteo, sem chave): busca de cidade, faixa no Início, cache no JSON |
 
 Navegação: `tabIndex` (ValueNotifier) com 4 abas — Guarda-Roupas, Início (padrão), Rastreio, Menu. Barra inferior escura, só ícones.
 
@@ -42,12 +44,17 @@ Navegação: `tabIndex` (ValueNotifier) com 4 abas — Guarda-Roupas, Início (p
 - Sem dados de exemplo: a primeira abertura começa vazia, na aba Guarda-Roupas.
 - Grade do Guarda-Roupas: 2 a 4 colunas, ajustada com pinça (`Listener` em `wardrobe.dart`).
 - Tema claro/escuro/sistema (`themeMode` em `store.dart`, salvo no JSON). As cores de `C` são `AppColor` (implementa `Color`, lê `appDark`), então funcionam em `const`; trocar o tema remonta o `MaterialApp` (chave). Use sempre tokens de `C`, nunca `Colors.white`/hex soltos para fundos e textos.
+- Usos: cada confirmação vira um `Wear` (dia, look opcional, peças). `UseLog`/`LookLog` e os contadores das peças são mantidos pelo `_applyWear` do store; editar ou apagar um uso desfaz e refaz esses efeitos. Dados antigos sem `wears` são migrados agrupando os usos por dia.
+- Data do uso: `DayField` (calendário, padrão hoje, sem datas futuras).
+- Ocasiões: padrão + `customOccasions` (criadas no formulário do look).
+- Cores novas: seletor livre `HsvColorPicker` (matiz, saturação/brilho e código hex).
+- Widgets que leem o `store` dentro de um `ListenableBuilder` não podem ser `const` (não seriam redesenhados).
 - Seletores de visualização (`SegTabs`) = abas com barra embaixo (estilo YouTube); opções de filtro = `YtChip`.
 
 ## Decisões e diferenças em relação ao prompt original
 
 - Persistência em arquivo JSON + `ChangeNotifier` em vez de Drift/SQLite + Riverpod + GoRouter (sem geração de código). Migrar é possível sem mudar as telas.
-- Clima ainda não implementado.
+- Clima resumido: só cidade manual (sem GPS). Mostra temperatura, condição, mín/máx e chance de chuva; toque atualiza, toque longo troca a cidade. O manifesto ganha a permissão INTERNET pelo `patch_android.py`.
 - Backup (`backup.dart`): `.zip` com `armario_virtual.json` + `fotos/`; salvar via `file_picker` (SAF), enviar via `share_plus`, restaurar via `file_picker` (aceita também o JSON antigo da área de transferência). CSV é enviado como arquivo com BOM.
 
 ## Diretrizes de interface (resumo)

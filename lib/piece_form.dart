@@ -382,33 +382,15 @@ class _PieceFormSheetState extends State<PieceFormSheet> {
             const SizedBox(height: 12),
             _panel(
               children: [
-                const SectionLabel('Tom'),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final h in kPalette)
-                      GestureDetector(
-                        onTap: () => setState(() => _ncHex = h),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Color(h),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: _ncHex == h ? C.accent : C.border,
-                              width: _ncHex == h ? 3 : 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                HsvColorPicker(value: _ncHex, onChanged: (v) => setState(() => _ncHex = v)),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _ncName,
-                  decoration: InputDecoration(labelText: 'Nome da cor *', hintText: 'Ex.: Verde-oliva', errorText: _ncError),
+                  decoration: InputDecoration(
+                    labelText: 'Nome da cor *',
+                    hintText: 'Ex.: ${nearestColorName(_ncHex)}',
+                    errorText: _ncError,
+                  ),
                   onChanged: (_) {
                     if (_ncError != null) setState(() => _ncError = null);
                   },

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'catalog.dart';
+import 'history.dart';
 import 'models.dart';
 import 'sheets.dart';
 import 'store.dart';
@@ -25,11 +26,34 @@ class _TrackingPageState extends State<TrackingPage> {
   String? _calTarget;
   int _calMonth = 0;
   int? _calDay;
+  String _view = 'resumo';
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(listenable: store, builder: (context, _) => _build(context));
+    return ListenableBuilder(
+      listenable: store,
+      builder: (context, _) => _view == 'historico' ? _history(context) : _build(context),
+    );
   }
+
+  Widget _viewTabs() => SegTabs<String>(
+        options: const [('resumo', 'Resumo'), ('historico', 'Histórico')],
+        value: _view,
+        onChanged: (v) => setState(() => _view = v),
+      );
+
+  Widget _history(BuildContext context) => ListView(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
+        children: [
+          const Text('Rastreio', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          _viewTabs(),
+          const SizedBox(height: 16),
+          // Sem const: precisa redesenhar quando os usos mudam.
+          // ignore: prefer_const_constructors
+          HistoryList(),
+        ],
+      );
 
   Widget _build(BuildContext context) {
     final t = todayDay();
@@ -73,6 +97,9 @@ class _TrackingPageState extends State<TrackingPage> {
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
         children: [
           const Text('Rastreio', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          _viewTabs(),
+          const SizedBox(height: 8),
           EmptyState(
             icon: Icons.bar_chart_rounded,
             text: 'Nenhum uso registrado.',
@@ -128,6 +155,9 @@ class _TrackingPageState extends State<TrackingPage> {
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
       children: [
         const Text('Rastreio', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          _viewTabs(),
+          const SizedBox(height: 8),
         Text(label, style: const TextStyle(fontSize: 14, color: C.text2)),
         const SizedBox(height: 16),
         SegTabs<String>(

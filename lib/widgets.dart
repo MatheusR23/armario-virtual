@@ -680,3 +680,233 @@ Future<bool> confirmDialog(
   );
   return r ?? false;
 }
+
+/// Data de um uso: mostra "Hoje · 22 nov" e abre o calendário ao tocar.
+class DayField extends StatelessWidget {
+  final int day;
+  final ValueChanged<int> onChanged;
+  const DayField({super.key, required this.day, required this.onChanged});
+
+  Future<void> _pick(BuildContext context) async {
+    final d = dateOf(day);
+    final now = dateOf(todayDay());
+    final r = await showDatePicker(
+      context: context,
+      initialDate: DateTime(d.year, d.month, d.day),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year, now.month, now.day),
+    );
+    if (r != null) onChanged(dayOf(r));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rel = relDay(day);
+    final label = rel == fmtDay(day) ? '${weekdayShort(day)}, ${fmtDay(day)}' : '$rel · ${fmtDay(day)}';
+    return Semantics(
+      button: true,
+      label: 'Data do uso: $label',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _pick(context),
+        child: Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: C.border),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined, size: 20, color: C.primaryDark),
+              const SizedBox(width: 12),
+              Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
+              const Icon(Icons.edit_outlined, size: 20, color: C.text2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Seletor de cor livre: quadro de saturação/brilho, barra de matiz e código hex.
+class HsvColorPicker extends StatefulWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+  const HsvColorPicker({super.key, required this.value, required this.onChanged});
+  @override
+  State<HsvColorPicker> createState() => _HsvColorPickerState();
+}
+
+class _HsvColorPickerState extends State<HsvColorPicker> {
+  late HSVColor _hsv;
+  final _hex = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _hsv = HSVColor.fromColor(Color(widget.value));
+    _hex.text = _hexOf(widget.value);
+  }
+
+  @override
+  void dispose() {
+    _hex.dispose();
+    super.dispose();
+  }
+
+  static String _hexOf(int v) => (v & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
+
+  void _set(HSVColor h, {bool fromText = false}) {
+    setState(() => _hsv = h);
+    final v = h.toColor().toARGB32() | 0xFF000000;
+    if (!fromText) _hex.text = _hexOf(v);
+    widget.onChanged(v);
+  }
+
+  void _area(Offset p, Size s) => _set(_hsv
+      .withSaturation((p.dx / s.width).clamp(0.0, 1.0))
+      .withValue(1 - (p.dy / s.height).clamp(0.0, 1.0)));
+
+  void _hue(Offset p, double w) => _set(_hsv.withHue((p.dx / w).clamp(0.0, 1.0) * 359.9));
+
+  @override
+  Widget build(BuildContext context) {
+    final hueColor = HSVColor.fromAHSV(1, _hsv.hue, 1, 1).toColor();
+    return LayoutBuilder(builder: (context, c) {
+      final w = c.maxWidth;
+      const h = 160.0;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Arrastos vertical e horizontal separados: assim o quadro ganha do
+          // rolar da janela (o arrasto "pan" perderia na vertical).
+          GestureDetector(
+            onTapDown: (d) => _area(d.localPosition, Size(w, h)),
+            onVerticalDragStart: (d) => _area(d.localPosition, Size(w, h)),
+            onVerticalDragUpdate: (d) => _area(d.localPosition, Size(w, h)),
+            onHorizontalDragStart: (d) => _area(d.localPosition, Size(w, h)),
+            onHorizontalDragUpdate: (d) => _area(d.localPosition, Size(w, h)),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: h,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [const Color(0xFFFFFFFF), hueColor]),
+                        ),
+                      ),
+                    ),
+                    const Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0x00000000), Color(0xFF000000)],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: _hsv.saturation * w - 11,
+                      top: (1 - _hsv.value) * h - 11,
+                      child: _thumb(_hsv.toColor()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTapDown: (d) => _hue(d.localPosition, w),
+            onHorizontalDragStart: (d) => _hue(d.localPosition, w),
+            onHorizontalDragUpdate: (d) => _hue(d.localPosition, w),
+            child: SizedBox(
+              height: 28,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: LinearGradient(colors: [
+                          for (var i = 0; i <= 6; i++) HSVColor.fromAHSV(1, i * 60.0 % 360, 1, 1).toColor(),
+                        ]),
+                      ),
+                    ),
+                  ),
+                  Positioned(left: _hsv.hue / 360 * w - 11, top: 3, child: _thumb(hueColor)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _hsv.toColor(),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: C.border),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _hex,
+                  maxLength: 6,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(labelText: 'Código', prefixText: '#', counterText: ''),
+                  onChanged: (s) {
+                    final t = s.trim().replaceAll('#', '');
+                    if (t.length != 6) return;
+                    final v = int.tryParse(t, radix: 16);
+                    if (v != null) _set(HSVColor.fromColor(Color(0xFF000000 | v)), fromText: true);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    });
+  }
+
+  Widget _thumb(Color c) => IgnorePointer(
+        child: Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: c,
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFFFFFFF), width: 3),
+            boxShadow: const [BoxShadow(color: Color(0x661D2930), blurRadius: 4)],
+          ),
+        ),
+      );
+}
+
+/// Nome sugerido para uma cor: a cor padrão mais parecida.
+String nearestColorName(int hex) {
+  final c = Color(hex);
+  var best = kColors.first.name;
+  var bestD = double.infinity;
+  for (final k in kColors) {
+    final o = Color(k.hex);
+    final d = math.pow(c.r - o.r, 2) + math.pow(c.g - o.g, 2) + math.pow(c.b - o.b, 2);
+    if (d < bestD) {
+      bestD = d.toDouble();
+      best = k.name;
+    }
+  }
+  return best;
+}

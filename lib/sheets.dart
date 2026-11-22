@@ -299,12 +299,11 @@ class ConfirmUseSheet extends StatefulWidget {
 }
 
 class _ConfirmUseSheetState extends State<ConfirmUseSheet> {
-  int _offset = 0;
+  int _day = todayDay();
 
   @override
   Widget build(BuildContext context) {
-    final t = todayDay();
-    final day = t - _offset;
+    final day = _day;
     final pieces = store.sel.ids().map(store.byId).whereType<Piece>().toList();
     final okN = pieces.where((p) => !store.usedOn(p.id, day)).length;
     return SheetFrame(
@@ -324,14 +323,7 @@ class _ConfirmUseSheetState extends State<ConfirmUseSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionLabel('Data'),
-          Wrap(
-            spacing: 8,
-            children: [
-              Pill(label: 'Hoje · ${fmtDay(t)}', selected: _offset == 0, onTap: () => setState(() => _offset = 0)),
-              Pill(label: 'Ontem · ${fmtDay(t - 1)}', selected: _offset == 1, onTap: () => setState(() => _offset = 1)),
-            ],
-          ),
+          DayField(day: _day, onChanged: (d) => setState(() => _day = d)),
           const SizedBox(height: 16),
           for (final p in pieces)
             Opacity(
@@ -394,8 +386,25 @@ class _LookFormSheetState extends State<LookFormSheet> {
   final List<ColorTag> _colors = [];
   String? _photo;
   bool _force = false;
+  bool _newOcc = false;
+  final _occName = TextEditingController();
+  String? _occError;
 
   bool get _editing => widget.editId != null;
+
+  void _addOccasion() {
+    final err = store.addOccasion(_occName.text);
+    if (err != null) {
+      setState(() => _occError = err);
+      return;
+    }
+    setState(() {
+      _occasion = _occName.text.trim();
+      _occName.clear();
+      _newOcc = false;
+      _occError = null;
+    });
+  }
 
   @override
   void initState() {
@@ -412,6 +421,7 @@ class _LookFormSheetState extends State<LookFormSheet> {
   @override
   void dispose() {
     _name.dispose();
+    _occName.dispose();
     super.dispose();
   }
 
@@ -504,8 +514,43 @@ class _LookFormSheetState extends State<LookFormSheet> {
             children: [
               for (final o in occasions)
                 Pill(label: o, selected: _occasion == o, onTap: () => setState(() => _occasion = o)),
+              Pill(
+                label: 'Nova',
+                selected: false,
+                leading: const Icon(Icons.add_rounded),
+                onTap: () => setState(() {
+                  _newOcc = true;
+                  _occError = null;
+                }),
+              ),
             ],
           ),
+          if (_newOcc) ...[
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _occName,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.sentences,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _addOccasion(),
+                    onChanged: (_) {
+                      if (_occError != null) setState(() => _occError = null);
+                    },
+                    decoration: InputDecoration(labelText: 'Nova ocasião', hintText: 'Ex.: Academia', errorText: _occError),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 52,
+                  child: OutlinedButton(onPressed: _addOccasion, child: const Text('Criar')),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 24),
           const SectionLabel('Cores principais'),
           Wrap(

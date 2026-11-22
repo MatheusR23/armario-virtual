@@ -11,6 +11,9 @@ if 'android:scheme="mailto"' not in s:
         s = s.replace('<queries>', '<queries>' + q, 1)
     else:
         s = s.replace('</manifest>', '<queries>' + q + '</queries>\n</manifest>', 1)
+# Internet para o clima (o manifesto principal gerado não pede).
+if 'android.permission.INTERNET' not in s:
+    s = s.replace('<application', '<uses-permission android:name="android.permission.INTERNET"/>\n    <application', 1)
 open(p, 'w', encoding='utf-8').write(s)
 print('AndroidManifest ajustado')
 
